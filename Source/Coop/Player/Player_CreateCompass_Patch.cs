@@ -5,35 +5,34 @@ using System.Reflection;
 
 namespace StayInTarkov.Coop.Player
 {
-    internal class Player_Gesture_Patch : ModuleReplicationPatch
+    internal class Player_CreateCompass_Patch : ModuleReplicationPatch
     {
-        public static List<string> CallLocally = new();
         public override Type InstanceType => typeof(EFT.Player);
-        public override string MethodName => "Gesture";
-
-        protected override MethodBase GetTargetMethod()
-        {
-            var method = ReflectionHelpers.GetMethodForType(InstanceType, "vmethod_3");
-            return method;
-        }
+        public override string MethodName => "CreateCompass";
+        public static List<string> CallLocally = new();
 
         [PatchPrefix]
         public static bool PrePatch(EFT.Player __instance)
         {
+            var player = __instance;
+            if (player == null)
+            {
+                return false;
+            }
+
             var result = false;
-            if (CallLocally.Contains(__instance.ProfileId))
+            if (CallLocally.Contains(player.ProfileId))
                 result = true;
 
             return result;
         }
 
         [PatchPostfix]
-        public static void PostPatch(
-           EFT.Player __instance,
-            EGesture gesture
-            )
+        public static void Postfix(EFT.Player __instance)
         {
             var player = __instance;
+            if (player == null)
+                return;
 
             if (CallLocally.Contains(player.ProfileId))
             {
@@ -41,12 +40,13 @@ namespace StayInTarkov.Coop.Player
                 return;
             }
 
-            Dictionary<string, object> dictionary = new();
-            dictionary.Add("g", gesture.ToString());
-            dictionary.Add("m", "Gesture");
+            Dictionary<string, object> dictionary = new()
+            {
+                { "m", "CreateCompass" }
+            };
+
             AkiBackendCommunicationCoop.PostLocalPlayerData(player, dictionary);
         }
-
 
         public override void Replicated(EFT.Player player, Dictionary<string, object> dict)
         {
@@ -59,16 +59,17 @@ namespace StayInTarkov.Coop.Player
             try
             {
                 CallLocally.Add(player.ProfileId);
-                if (Enum.TryParse<EGesture>(dict["g"].ToString(), out var g))
-                {
-                    player.vmethod_3(g);
-                }
+                player.CreateCompass();
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                Logger.LogInfo(e);
+                Logger.LogInfo(ex);
             }
+        }
 
+        protected override MethodBase GetTargetMethod()
+        {
+            return ReflectionHelpers.GetMethodForType(InstanceType, MethodName);
         }
     }
 }
