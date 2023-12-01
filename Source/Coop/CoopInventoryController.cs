@@ -62,7 +62,7 @@ namespace StayInTarkov.Coop
 		}
 
 
-		public Dictionary<string, (AbstractInternalOperation, Callback, Action)> OperationCallbacks { get; } = new();
+		public Dictionary<string, (AbstractInternalOperation, Action)> OperationCallbacks { get; } = new();
 		public HashSet<string> SentExecutions { get; } = new();
 
         public override void Execute(AbstractInternalOperation operation, [CanBeNull] Callback callback)
@@ -90,7 +90,7 @@ namespace StayInTarkov.Coop
 			if(json == null)
 				return;
 
-            OperationCallbacks.Add(json, (operation, callback, new Action(() => {
+            OperationCallbacks.Add(json, (operation, new Action(() => {
 
                 //if (result.Succeed)
                 //{
@@ -101,18 +101,7 @@ namespace StayInTarkov.Coop
                         if (executeResult.Succeed)
                         {
                             ReflectionHelpers.SetFieldOrPropertyFromInstance<CommandStatus>(operation, "commandStatus_0", CommandStatus.Succeed);
-                            
-                            var baseInvOp = (BaseInventoryOperation)ReflectionHelpers.GetFieldFromTypeByFieldType(operation.GetType(), typeof(BaseInventoryOperation))?.GetValue(operation);
-                            if(baseInvOp != null)
-                            {
-                                baseInvOp.RaiseEvents(CommandStatus.Succeed);
-                            }
-                            var oneItemOp = (OneItemOperation)ReflectionHelpers.GetFieldFromTypeByFieldType(operation.GetType(), typeof(OneItemOperation))?.GetValue(operation);
-                            if(oneItemOp != null)
-                            {
-                                oneItemOp.RaiseEvents(CommandStatus.Succeed);
-                            }
-                            //callback?.Invoke(executeResult);
+                            RaiseInvEvents(operation, CommandStatus.Succeed);
                             operation.Dispose();
                         }
                         else
@@ -143,7 +132,8 @@ namespace StayInTarkov.Coop
             BepInLogger.LogInfo($"SendExecute");
             BepInLogger.LogInfo($"{operation.GetType()}");
             BepInLogger.LogInfo($"{operation}");
-            ReflectionHelpers.SetFieldOrPropertyFromInstance<CommandStatus>(operation, "commandStatus_0", CommandStatus.Begin);
+            //ReflectionHelpers.SetFieldOrPropertyFromInstance<CommandStatus>(operation, "commandStatus_0", CommandStatus.Begin);
+            RaiseInvEvents(operation, CommandStatus.Begin);
 
             if (operation is MoveInternalOperation moveOperation)
             {
@@ -283,20 +273,45 @@ namespace StayInTarkov.Coop
             return json;
         }
 
+        public void CancelExecute(string packetJson)
+        {
+            BepInLogger.LogError($"CancelExecute");
+            BepInLogger.LogInfo($"{packetJson}");
+            if (OperationCallbacks.ContainsKey(packetJson))
+            {
+                OperationCallbacks[packetJson].Item1.vmethod_0(delegate (IResult result)
+                {
+                    ReflectionHelpers.SetFieldOrPropertyFromInstance<CommandStatus>(OperationCallbacks[packetJson].Item1, "commandStatus_0", CommandStatus.Succeed);
+                });
+                OperationCallbacks[packetJson].Item2();
+                OperationCallbacks.Remove(packetJson);
+            }
+        }
+
         public void ReceiveExecute(AbstractInternalOperation operation, string packetJson)
         {
             BepInLogger.LogInfo($"ReceiveExecute");
             BepInLogger.LogInfo($"{packetJson}");
+
+            if (operation == null)
+                return;
+
             BepInLogger.LogInfo($"{operation}");
 
             //ReceivedOperationPacket = operation;
-            ReflectionHelpers.SetFieldOrPropertyFromInstance<CommandStatus>(operation, "commandStatus_0", CommandStatus.Begin);
+            //ReflectionHelpers.SetFieldOrPropertyFromInstance<CommandStatus>(operation, "commandStatus_0", CommandStatus.Begin);
             if (OperationCallbacks.ContainsKey(packetJson))
             {
                 BepInLogger.LogInfo($"Using OperationCallbacks!");
 
-                OperationCallbacks[packetJson].Item2.Succeed();
-                OperationCallbacks[packetJson].Item3();
+                //OperationCallbacks[packetJson].Item1.vmethod_0(delegate (IResult result)
+                //{
+                //    //ReflectionHelpers.SetFieldOrPropertyFromInstance<CommandStatus>(OperationCallbacks[packetJson].Item1, "commandStatus_0", CommandStatus.Succeed);
+                //});
+                RaiseInvEvents(operation, CommandStatus.Succeed);
+                RaiseInvEvents(OperationCallbacks[packetJson].Item1, CommandStatus.Succeed);
+                OperationCallbacks[packetJson].Item2();
+                //OperationCallbacks[packetJson].Item1.vmethod_0((IResult result) => { RaiseInvEvents(operation, CommandStatus.Succeed); }, true);
                 OperationCallbacks.Remove(packetJson);
             }
             else
@@ -307,13 +322,31 @@ namespace StayInTarkov.Coop
                 });
 
             }
+        }
 
+        void RaiseInvEvents(object operation, CommandStatus status)
+        {
+            if (operation == null) 
+                return;
+
+            ReflectionHelpers.SetFieldOrPropertyFromInstance<CommandStatus>(operation, "commandStatus_0", status);
+
+            var baseInvOp = (BaseInventoryOperation)ReflectionHelpers.GetFieldFromTypeByFieldType(operation.GetType(), typeof(BaseInventoryOperation))?.GetValue(operation);
+            if (baseInvOp != null)
+            {
+                baseInvOp.RaiseEvents(status);
+            }
+            var oneItemOp = (OneItemOperation)ReflectionHelpers.GetFieldFromTypeByFieldType(operation.GetType(), typeof(OneItemOperation))?.GetValue(operation);
+            if (oneItemOp != null)
+            {
+                oneItemOp.RaiseEvents(status);
+            }
         }
 
         public override void Execute(SearchContentOperation operation, Callback callback)
         {
-            BepInLogger.LogInfo($"CoopInventoryController: Execute");
-            BepInLogger.LogInfo($"CoopInventoryController: {operation}");
+            BepInLogger.LogInfo($"Execute");
+            BepInLogger.LogInfo($"{operation}");
             base.Execute(operation, callback);
         }
 
@@ -626,6 +659,7 @@ namespace StayInTarkov.Coop
                 && DiscardLimits.ContainsKey(DogtagComponent.BearDogtagsTemplate) // Value: 0
                 && DiscardLimits.ContainsKey(DogtagComponent.UsecDogtagsTemplate); // Value: 0
         }
+
     }
 
     public interface ICoopInventoryController
