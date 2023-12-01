@@ -1,4 +1,6 @@
-﻿using Newtonsoft.Json;
+﻿using EFT.InventoryLogic;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using SIT.Core.Coop.NetworkPacket;
 using StayInTarkov.Coop;
 using StayInTarkov.Coop.Components;
@@ -40,13 +42,14 @@ namespace SIT.Core.Coop.PacketHandlers
 
             _processedPackets.Add(packetJson);
 
-            ProcessMoveOperation(packet);
-            ProcessThrowOperation(packet);
-            ProcessFoldOperation(packet);
+            ProcessMoveOperation(ref packet);
+            ProcessThrowOperation(ref packet);
+            ProcessFoldOperation(ref packet);
+            ProcessSearchOperation(ref packet);
 
         }
 
-        private void ProcessFoldOperation(Dictionary<string, object> packet)
+        private void ProcessFoldOperation(ref Dictionary<string, object> packet)
         {
             if (packet["m"].ToString() != "MoveOperation")
                 return;
@@ -56,18 +59,49 @@ namespace SIT.Core.Coop.PacketHandlers
                 || packet["DynamicOperationType"].ToString() != "FoldOperation")
                 return;
 
+
             var packetJson = packet.ToJson();
 
             var plyr = Players[packet["profileId"].ToString()];
             MoveOperationPacket moveOperationPacket = JsonConvert.DeserializeObject<MoveOperationPacket>(packetJson);
+            Logger.LogInfo(moveOperationPacket.ToJson());
 
             var moveOpDict = JsonConvert.DeserializeObject<Dictionary<string, object>>(moveOperationPacket.MoveOpJson);
-            //ThrowOperationDescriptor throwOpDesc = JsonConvert.DeserializeObject<ThrowOperationDescriptor>(JsonConvert.SerializeObject(moveOpDict));
+            var moveOpJO = JObject.Parse(moveOperationPacket.MoveOpJson);
+            var parentId = moveOpJO["From"]["Container"]["ParentId"].ToString();
+            Logger.LogInfo(parentId);
+
+            FoldOperationDescriptor foldOperationDescriptor = JsonConvert.DeserializeObject<FoldOperationDescriptor>(JsonConvert.SerializeObject(moveOpDict));
+
+
+            var pic = ItemFinder.GetPlayerInventoryController(plyr) as CoopInventoryController;
+            if (pic == null)
+            {
+                Logger.LogError("Player Inventory Controller is null");
+                return;
+            }
+
+            if (ItemFinder.TryFindItem(parentId, out var item))
+            {
+                if (!ItemMovementHandler.CanFold(item, out var foldableComponent))
+                {
+                    Logger.LogError("Attempted to fold an unfoldable component?");
+                    pic.CancelExecute(packetJson);
+                }
+                else 
+                {
+                    var foldOperation = new FoldOperation(foldOperationDescriptor.OperationId, pic, foldableComponent, true);
+                    pic.ReceiveExecute(foldOperation, packetJson);
+                }
+            }
         }
 
-        private void ProcessMoveOperation(Dictionary<string, object> packet)
+        private void ProcessMoveOperation(ref Dictionary<string, object> packet)
         {
             if (packet["m"].ToString() != "MoveOperation")
+                return;
+
+            if (packet.ContainsKey("DynamicOperationType") && packet["DynamicOperationType"] != null)
                 return;
 
             var packetJson = packet.ToJson();
@@ -176,12 +210,37 @@ namespace SIT.Core.Coop.PacketHandlers
                     }
                 }
             }
-            //pic.ReceiveDoOperation(moveOpDesc);
         }
 
-        private void ProcessThrowOperation(Dictionary<string, object> packet)
+        private void ProcessThrowOperation(ref Dictionary<string, object> packet)
         {
             if (packet["m"].ToString() != "ThrowOperation")
+                return;
+
+            var packetJson = packet.ToJson();
+
+            var plyr = Players[packet["profileId"].ToString()];
+            MoveOperationPacket moveOperationPacket = JsonConvert.DeserializeObject<MoveOperationPacket>(packetJson);
+
+            var moveOpDict = JsonConvert.DeserializeObject<Dictionary<string, object>>(moveOperationPacket.MoveOpJson);
+            ThrowOperationDescriptor throwOpDesc = JsonConvert.DeserializeObject<ThrowOperationDescriptor>(JsonConvert.SerializeObject(moveOpDict));
+
+            var pic = ItemFinder.GetPlayerInventoryController(plyr) as CoopInventoryController;
+            if (pic == null)
+            {
+                Logger.LogError("Player Inventory Controller is null");
+                return;
+            }
+
+            if (ItemFinder.TryFindItem(throwOpDesc.ItemId, out var item))
+            {
+                pic.ReceiveExecute((MoveInternalOperation2)plyr.ToThrowOperation(throwOpDesc).Value, packetJson);
+            }
+        }
+
+        private void ProcessSearchOperation(ref Dictionary<string, object> packet)
+        {
+            if (packet["m"].ToString() != "SearchOperation")
                 return;
 
             var packetJson = packet.ToJson();
