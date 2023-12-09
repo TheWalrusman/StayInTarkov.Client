@@ -25,17 +25,17 @@ namespace StayInTarkov.Coop
         private EFT.Player Player { get; set; }
 
 
-        public CoopInventoryController(EFT.Player player, Profile profile, bool examined) : base(player, profile, examined)
+        public CoopInventoryController(EFT.Player Player, Profile profile, bool examined) : base(Player, profile, examined)
         {
             BepInLogger = BepInEx.Logging.Logger.CreateLogSource(nameof(CoopInventoryController));
-			this.player = player;
+			this.Player = Player;
         }
 
         public override void SubtractFromDiscardLimits(Item rootItem, IEnumerable<ItemsCount> destroyedItems)
         {
         }
 
-        public override void InProcess(ItemController executor, Item item, ItemAddress to, bool succeed, IBaseInventoryOperation operation, Callback callback)
+        public override void InProcess(ItemController executor, Item item, ItemAddress to, bool succeed, IOperation1 operation, Callback callback)
         {
             BepInLogger.LogInfo($"InProcess [executor]");
 
@@ -46,16 +46,16 @@ namespace StayInTarkov.Coop
                 return;
             }
             base.InProcess(executor, item, to, succeed, operation, callback);
-		}
+        }
 
-        public override void OutProcess(Item item, ItemAddress from, ItemAddress to, IBaseInventoryOperation operation, Callback callback)
+        public override void OutProcess(Item item, ItemAddress from, ItemAddress to, IOperation1 operation, Callback callback)
         {
             BepInLogger.LogInfo($"OutProcess [item]");
 			base.OutProcess(item, from, to, operation, callback);
 
 		}
 
-		public override void OutProcess(ItemController executor, Item item, ItemAddress from, ItemAddress to, IBaseInventoryOperation operation, Callback callback)
+		public override void OutProcess(ItemController executor, Item item, ItemAddress from, ItemAddress to, IOperation1 operation, Callback callback)
 		{
 			BepInLogger.LogInfo($"OutProcess [executor]");
 
@@ -63,10 +63,10 @@ namespace StayInTarkov.Coop
 		}
 
 
-		public Dictionary<string, (AbstractInternalOperation, Action)> OperationCallbacks { get; } = new();
+		public Dictionary<string, (AbstractInventoryOperation, Action)> OperationCallbacks { get; } = new();
 		public HashSet<string> SentExecutions { get; } = new();
 
-        public override void Execute(AbstractInternalOperation operation, [CanBeNull] Callback callback)
+        public override void Execute(AbstractInventoryOperation operation, [CanBeNull] Callback callback)
         {
             BepInLogger.LogInfo($"Execute");
             BepInLogger.LogInfo($"{operation}");
@@ -93,8 +93,6 @@ namespace StayInTarkov.Coop
 
             OperationCallbacks.Add(json, (operation, new Action(() => {
 
-                //if (result.Succeed)
-                //{
                     BepInLogger.LogInfo("ActionCallback");
                     operation.vmethod_0(delegate (IResult executeResult)
                     {
@@ -113,21 +111,16 @@ namespace StayInTarkov.Coop
 
                     }, false);
 
-                //}
 
 
             }
             )
             ));
 
-   //         var vm = ReflectionHelpers.GetMethodForType(operation.GetType(), "vmethod_0");
-			//if(vm != null)
-			//	vm.Invoke(operation, new object[] { callback, false });
-      
         }
 
 
-        private string SendExecute(AbstractInternalOperation operation)
+        private string SendExecute(AbstractInventoryOperation operation)
 		{
 			string json = null;
             BepInLogger.LogInfo($"SendExecute");
@@ -170,7 +163,7 @@ namespace StayInTarkov.Coop
                 // There doesn't seem to be a tester for this?
                 try
                 {
-                    isToAddressPlayerInventoryAddress = player.Inventory.IsEquipmentAddress(this.ToItemAddress(moveOperationDescriptor.To));
+                    isToAddressPlayerInventoryAddress = Player.Inventory.IsEquipmentAddress(this.ToItemAddress(moveOperationDescriptor.To));
                 }
                 catch(Exception)
                 {
@@ -181,7 +174,7 @@ namespace StayInTarkov.Coop
                 var moveOpJson = moveOperationDescriptor.SITToJson();
                 MoveOperationPacket moveOperationPacket 
                     = new MoveOperationPacket(
-                        player.ProfileId
+                        Player.ProfileId
                         , moveOperation.Item.Id
                         , moveOperation.Item.TemplateId
                         , moveOperation.To.GetType().ToString()
@@ -202,7 +195,7 @@ namespace StayInTarkov.Coop
                 throwOperationDescriptor.ItemId = throwOperation.Item.Id;
 
                 var moveOpJson = throwOperationDescriptor.SITToJson();
-                MoveOperationPacket moveOperationPacket = new MoveOperationPacket(player.ProfileId, throwOperation.Item.Id, throwOperation.Item.TemplateId, null, null);
+                MoveOperationPacket moveOperationPacket = new MoveOperationPacket(Player.ProfileId, throwOperation.Item.Id, throwOperation.Item.TemplateId, null, null);
 				moveOperationPacket.Method = "ThrowOperation";
                 moveOperationPacket.MoveOpJson = moveOpJson;
 
@@ -248,7 +241,7 @@ namespace StayInTarkov.Coop
                     var moveOpJson = moveOperationDescriptor.SITToJson();
 
                     MoveOperationPacket moveOperationPacket = new MoveOperationPacket(
-                        player.ProfileId
+                        Player.ProfileId
                         , oneitemoperation.Item1.Id
                         , oneitemoperation.Item1.TemplateId
                         , oneitemoperation.To1 != null ? oneitemoperation.To1.GetType().ToString() : null
@@ -289,7 +282,7 @@ namespace StayInTarkov.Coop
             }
         }
 
-        public void ReceiveExecute(AbstractInternalOperation operation, string packetJson)
+        public void ReceiveExecute(AbstractInventoryOperation operation, string packetJson)
         {
             BepInLogger.LogInfo($"ReceiveExecute");
             BepInLogger.LogInfo($"{packetJson}");
@@ -332,260 +325,26 @@ namespace StayInTarkov.Coop
 
             ReflectionHelpers.SetFieldOrPropertyFromInstance<CommandStatus>(operation, "commandStatus_0", status);
 
-            var baseInvOp = (BaseInventoryOperation)ReflectionHelpers.GetFieldFromTypeByFieldType(operation.GetType(), typeof(BaseInventoryOperation))?.GetValue(operation);
-            if (baseInvOp != null)
-            {
-                baseInvOp.RaiseEvents(status);
-            }
-            var oneItemOp = (OneItemOperation)ReflectionHelpers.GetFieldFromTypeByFieldType(operation.GetType(), typeof(OneItemOperation))?.GetValue(operation);
-            if (oneItemOp != null)
-            {
-                oneItemOp.RaiseEvents(status);
-            }
+            //var baseInvOp = (BaseInventoryOperation)ReflectionHelpers.GetFieldFromTypeByFieldType(operation.GetType(), typeof(BaseInventoryOperation))?.GetValue(operation);
+            //if (baseInvOp != null)
+            //{
+            //    baseInvOp.RaiseEvents(status);
+            //}
+            //var oneItemOp = (OneItemOperation)ReflectionHelpers.GetFieldFromTypeByFieldType(operation.GetType(), typeof(OneItemOperation))?.GetValue(operation);
+            //if (oneItemOp != null)
+            //{
+            //    oneItemOp.RaiseEvents(status);
+            //}
         }
 
-        public override void Execute(SearchContentOperation operation, Callback callback)
+        public override bool vmethod_0(AbstractInventoryOperation operation)
         {
-            BepInLogger.LogInfo($"Execute");
-            BepInLogger.LogInfo($"{operation}");
-            base.Execute(operation, callback);
+            return true;
         }
 
-        public override void ExecuteStop(SearchContentOperation operation)
+        public void ReceiveDoOperation(AbstractDescriptor1 descriptor)
         {
-            BepInLogger.LogInfo($"CoopInventoryController: ExecuteStop");
-            BepInLogger.LogInfo($"CoopInventoryController: {operation}");
-            base.ExecuteStop(operation);
-        }
-
-        //public override void InProcess(ItemController executor, Item item, ItemAddress to, bool succeed, IBaseInventoryOperation operation, Callback callback)
-        //{
-        //    //BepInLogger.LogInfo($"CoopInventoryController: InProcess");
-        //    //BepInLogger.LogInfo($"CoopInventoryController: {item}");
-        //    //BepInLogger.LogInfo($"CoopInventoryController: {to}");
-        //    //BepInLogger.LogInfo($"CoopInventoryController: {operation}");
-        //    base.InProcess(executor, item, to, succeed, operation, callback);
-        //}
-
-        //public virtual void ReceiveInProcess(ItemController executor, Item item, ItemAddress to, bool succeed, IBaseInventoryOperation operation, Callback callback)
-        //{
-        //    //BepInLogger.LogInfo($"ReceiveInProcess");
-        //    //BepInLogger.LogInfo($"{item}");
-        //    //BepInLogger.LogInfo($"{to}");
-        //    //BepInLogger.LogInfo($"{operation}");
-        //    base.InProcess(executor, item, to, succeed, operation, callback);
-        //}
-
-        /// <summary>
-        /// General Operations
-        /// </summary>
-        /// <param name="operation"></param>
-        /// <returns></returns>
-        public override bool vmethod_0(AbstractInternalOperation operation)
-        {
-            //BepInLogger.LogInfo($"CoopInventoryController: vmethod_0");
-            //BepInLogger.LogInfo($"CoopInventoryController: {operation}");
-
-
-			//return true;
-			// GClass2721 (Load Mag Operation?)
-			// GClass2730 (Split Bullet Operation?)
-			// GClass2734 (Unload Mag Operation?)
-			// 
-
-
-			/*
-             * if (descriptor is AddOperationDescriptor addOperationDescriptor)
-		{
-			AddOperationDescriptor descriptor2 = addOperationDescriptor;
-			return ToAddOperation(descriptor2);
-		}
-		if (descriptor is LoadMagOperationDescriptor loadMagOperationDescriptor)
-		{
-			LoadMagOperationDescriptor descriptor3 = loadMagOperationDescriptor;
-			return ToLoadMagOperation(descriptor3);
-		}
-		if (descriptor is UnloadMagOperationDescriptor unloadMagOperationDescriptor)
-		{
-			UnloadMagOperationDescriptor descriptor4 = unloadMagOperationDescriptor;
-			return ToUnloadMagOperation(descriptor4);
-		}
-		if (descriptor is RemoveOperationDescriptor removeOperationDescriptor)
-		{
-			RemoveOperationDescriptor descriptor5 = removeOperationDescriptor;
-			return ToRemoveOperation(descriptor5);
-		}
-		if (descriptor is MoveOperationDescriptor moveOperationDescriptor)
-		{
-			MoveOperationDescriptor descriptor6 = moveOperationDescriptor;
-			return ToMoveOperation(descriptor6);
-		}
-		if (descriptor is MoveAllOperationDescriptor moveAllOperationDescriptor)
-		{
-			MoveAllOperationDescriptor descriptor7 = moveAllOperationDescriptor;
-			return ToMoveAllOperation(descriptor7);
-		}
-		if (descriptor is SplitOperationDescriptor splitOperationDescriptor)
-		{
-			SplitOperationDescriptor descriptor8 = splitOperationDescriptor;
-			return ToSplitOperation(descriptor8);
-		}
-		if (descriptor is MergeOperationDescriptor mergeOperationDescriptor)
-		{
-			MergeOperationDescriptor descriptor9 = mergeOperationDescriptor;
-			return ToMergeOperation(descriptor9);
-		}
-		if (descriptor is TransferOperationDescriptor transferOperationDescriptor)
-		{
-			TransferOperationDescriptor descriptor10 = transferOperationDescriptor;
-			return ToTransferOperation(descriptor10);
-		}
-		if (descriptor is SwapOperationDescriptor swapOperationDescriptor)
-		{
-			SwapOperationDescriptor descriptor11 = swapOperationDescriptor;
-			return ToSwapOperation(descriptor11);
-		}
-		if (descriptor is ThrowOperationDescriptor throwOperationDescriptor)
-		{
-			ThrowOperationDescriptor descriptor12 = throwOperationDescriptor;
-			return ToThrowOperation(descriptor12);
-		}
-		if (descriptor is ToggleOperationDescriptor toggleOperationDescriptor)
-		{
-			ToggleOperationDescriptor descriptor13 = toggleOperationDescriptor;
-			return ToToggleOperation(descriptor13);
-		}
-		if (descriptor is FoldOperationDescriptor foldOperationDescriptor)
-		{
-			FoldOperationDescriptor descriptor14 = foldOperationDescriptor;
-			return ToFoldOperation(descriptor14);
-		}
-		if (descriptor is ShotOperationDescriptor shotOperationDescriptor)
-		{
-			ShotOperationDescriptor descriptor15 = shotOperationDescriptor;
-			return ToShotOperation(descriptor15);
-		}
-		if (descriptor is ApplyOperationDescriptor applyOperationDescriptor)
-		{
-			ApplyOperationDescriptor descriptor16 = applyOperationDescriptor;
-			return ToApplyKeyOperation(descriptor16);
-		}
-		if (descriptor is CreateMapMarkerOperationDescriptor createMapMarkerOperationDescriptor)
-		{
-			CreateMapMarkerOperationDescriptor descriptor17 = createMapMarkerOperationDescriptor;
-			return ToCreateMapMarkerOperation(descriptor17);
-		}
-		if (descriptor is EditMapMarkerOperationDescriptor editMapMarkerOperationDescriptor)
-		{
-			EditMapMarkerOperationDescriptor descriptor18 = editMapMarkerOperationDescriptor;
-			return ToEditMapMarkerOperation(descriptor18);
-		}
-		if (descriptor is DeleteMapMarkerOperationDescriptor deleteMapMarkerOperationDescriptor)
-		{
-			DeleteMapMarkerOperationDescriptor descriptor19 = deleteMapMarkerOperationDescriptor;
-			return ToDeleteMapMarkerOperation(descriptor19);
-		}
-		if (descriptor is AddNoteOperationDescriptor addNoteOperationDescriptor)
-		{
-			AddNoteOperationDescriptor descriptor20 = addNoteOperationDescriptor;
-			return ToAddNoteOperation(descriptor20);
-		}
-		if (descriptor is EditNoteOperationDescriptor editNoteOperationDescriptor)
-		{
-			EditNoteOperationDescriptor descriptor21 = editNoteOperationDescriptor;
-			return ToEditNoteOperation(descriptor21);
-		}
-		if (descriptor is DeleteNoteOperationDescriptor deleteNoteOperationDescriptor)
-		{
-			DeleteNoteOperationDescriptor descriptor22 = deleteNoteOperationDescriptor;
-			return ToDeleteNoteOperation(descriptor22);
-		}
-		if (descriptor is ExamineOperationDescriptor examineOperationDescriptor)
-		{
-			ExamineOperationDescriptor descriptor23 = examineOperationDescriptor;
-			return ToExamineOperation(descriptor23);
-		}
-		if (descriptor is ExamineMalfunctionOperationDescriptor examineMalfunctionOperationDescriptor)
-		{
-			ExamineMalfunctionOperationDescriptor descriptor24 = examineMalfunctionOperationDescriptor;
-			return ToExamineMalfunctionOperation(descriptor24);
-		}
-		if (descriptor is ExamineMalfTypeOperationDescriptor examineMalfTypeOperationDescriptor)
-		{
-			ExamineMalfTypeOperationDescriptor descriptor25 = examineMalfTypeOperationDescriptor;
-			return ToExamineMalfTypeOperation(descriptor25);
-		}
-		if (descriptor is CheckMagazineOperationDescriptor checkMagazineOperationDescriptor)
-		{
-			CheckMagazineOperationDescriptor descriptor26 = checkMagazineOperationDescriptor;
-			return ToCheckMagazineOperation(descriptor26);
-		}
-		if (descriptor is BindItemOperationDescriptor bindItemOperationDescriptor)
-		{
-			BindItemOperationDescriptor descriptor27 = bindItemOperationDescriptor;
-			return method_1(descriptor27);
-		}
-		if (descriptor is UnbindItemOperationDescriptor unbindItemOperationDescriptor)
-		{
-			UnbindItemOperationDescriptor descriptor28 = unbindItemOperationDescriptor;
-			return method_2(descriptor28);
-		}
-		if (descriptor is InsureItemsOperationDescriptor insureItemsOperationDescriptor)
-		{
-			InsureItemsOperationDescriptor descriptor29 = insureItemsOperationDescriptor;
-			return method_3(descriptor29);
-		}
-		if (descriptor is SetupItemOperationDescriptor setupItemOperationDescriptor)
-		{
-			SetupItemOperationDescriptor descriptor30 = setupItemOperationDescriptor;
-			return ToSetupItemOperation(descriptor30);
-		}
-		if (descriptor is TagOperationDescriptor tagOperationDescriptor)
-		{
-			TagOperationDescriptor descriptor31 = tagOperationDescriptor;
-			return ToTagOperation(descriptor31);
-		}
-		if (descriptor is OperateStationaryWeaponOperationDescriptor operateStationaryWeaponOperationDescriptor)
-		{
-			OperateStationaryWeaponOperationDescriptor descriptor32 = operateStationaryWeaponOperationDescriptor;
-			return ToStationaryOperation(descriptor32);
-		}
-		if (descriptor is WeaponRechamberOperationDescriptor weaponRechamberOperationDescriptor)
-		{
-			WeaponRechamberOperationDescriptor descriptor33 = weaponRechamberOperationDescriptor;
-			return ToWeaponRechamberOperation(descriptor33);
-		}
-		if (descriptor is Descriptor descriptor34)
-		{
-			Descriptor descriptor35 = descriptor34;
-			return ToQuestAcceptOperation(descriptor35);
-		}
-		if (descriptor is QuestFinishDescriptor questFinishDescriptor)
-		{
-			QuestFinishDescriptor descriptor36 = questFinishDescriptor;
-			return ToQuestFinishOperation(descriptor36);
-		}
-		if (descriptor is QuestHandoverDescriptor questHandoverDescriptor)
-		{
-			QuestHandoverDescriptor descriptor37 = questHandoverDescriptor;
-			return ToQuestHandoverOperation(descriptor37);
-		}
-		if (descriptor is InventoryLogicOperationsCreateItemsDescriptor inventoryLogicOperationsCreateItemsDescriptor)
-		{
-			InventoryLogicOperationsCreateItemsDescriptor descriptor38 = inventoryLogicOperationsCreateItemsDescriptor;
-			return ToCreateItemsOperation(descriptor38);
-		}
-             */
-
-
-
-			//return base.vmethod_0(operation);
-			return true;
-		}
-
-		public virtual void ReceiveDoOperation(AbstractDescriptor2 descriptor)
-        {
-			var invOp = player.ToInventoryOperation(descriptor);
+			var invOp = Player.ToInventoryOperation(descriptor);
 			BepInLogger.LogInfo("ReceiveDoOperation");
             BepInLogger.LogInfo(invOp);
             base.vmethod_0(invOp.Value);
@@ -628,7 +387,7 @@ namespace StayInTarkov.Coop
             //BepInLogger.LogInfo("ThrowItem");
             //destroyedItems = new List<ItemsCount>();
             //base.ThrowItem(item, destroyedItems, callback, downDirection);
-            Execute(new MoveInternalOperation2(ushort_0++, this, item, destroyedItems, player, downDirection), callback);
+            Execute(new MoveInternalOperation2(ushort_0++, this, item, destroyedItems, Player, downDirection), callback);
         }
 
         public override SOperationResult3<bool> TryThrowItem(Item item, Callback callback = null, bool silent = false)

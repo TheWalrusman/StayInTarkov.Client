@@ -1,5 +1,5 @@
+using Aki.SinglePlayer.Patches.Healing;
 using BepInEx;
-using StayInTarkov.AkiSupport.Singleplayer.Patches.Healing;
 using StayInTarkov.AkiSupport.Singleplayer.Patches.MainMenu;
 using StayInTarkov.AkiSupport.Singleplayer.Patches.Progression;
 using StayInTarkov.AkiSupport.Singleplayer.Patches.Quests;

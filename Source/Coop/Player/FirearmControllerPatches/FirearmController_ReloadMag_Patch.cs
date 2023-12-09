@@ -50,7 +50,7 @@ namespace SIT.Core.Coop.Player.FirearmControllerPatches
             {
                 { "m", "ReloadMag" }
             };
-            AkiBackendCommunicationCoop.PostLocalPlayerData(player, dictionary, true, out _, out var generatedData);
+            AkiBackendCommunicationCoop.PostLocalPlayerData(player, dictionary, out _, out var generatedData);
             _Processed.Add(generatedData.SITToJson());
         }
 
