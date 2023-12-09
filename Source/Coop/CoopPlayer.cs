@@ -1,4 +1,5 @@
 ﻿using BepInEx.Logging;
+using Comfort.Common;
 using EFT;
 using EFT.HealthSystem;
 using EFT.Interactive;
@@ -12,12 +13,15 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using UnityEngine;
+using static ChartAndGraph.ChartItemEvents;
+using static UnityEngine.RemoteConfigSettingsHelper;
 
 namespace StayInTarkov.Coop
 {
-    internal class CoopPlayer : LocalPlayer
+    public class CoopPlayer : LocalPlayer
     {
         ManualLogSource BepInLogger { get; set; }
 
@@ -84,7 +88,7 @@ namespace StayInTarkov.Coop
 
             await player
                 .Init(rotation, layerName, pointOfView, profile, inventoryController
-                , new PlayerHealthController(profile.Health, player, inventoryController, profile.Skills, aiControl)
+                , new CoopHealthController(profile.Health, player, inventoryController, profile.Skills, aiControl)
                 , isYourPlayer ? new CoopPlayerStatisticsManager() : new NullStatisticsManager()
                 , questController
                 , filter
@@ -99,6 +103,7 @@ namespace StayInTarkov.Coop
             player.AIData = new AIData(null, player);
             player.AggressorFound = false;
             player._animators[0].enabled = true;
+            player._animators[0].speed = isYourPlayer ? 0.9f : 0.6f;
             player.BepInLogger = BepInEx.Logging.Logger.CreateLogSource("CoopPlayer");
 
             // If this is a Client Drone add Player Replicated Component
@@ -186,7 +191,7 @@ namespace StayInTarkov.Coop
             PreviousSentDamageInfoPackets.Add(packet.ToJson());
             // -----------------------------------------------------------
 
-            AkiBackendCommunicationCoop.PostLocalPlayerData(this, packet, true);
+            AkiBackendCommunicationCoop.PostLocalPlayerData(this, packet);
         }
 
         public void ReceiveDamageFromServer(Dictionary<string, object> dict)
@@ -300,45 +305,74 @@ namespace StayInTarkov.Coop
 
         public override void Rotate(Vector2 deltaRotation, bool ignoreClamp = false)
         {
-            if (!CoopGameComponent.TryGetCoopGameComponent(out var coopGC))
-            {
-                base.Rotate(deltaRotation, ignoreClamp);
-                return;
-            }
-
-            // If using Client Side Damage Model and Pressing the Trigger, send rotation to Server
-            if (coopGC.SITConfig.useClientSideDamageModel
-                && FirearmController_SetTriggerPressed_Patch.LastPress.ContainsKey(this.ProfileId)
+            if (
+                (FirearmController_SetTriggerPressed_Patch.LastPress.ContainsKey(this.ProfileId)
                 && FirearmController_SetTriggerPressed_Patch.LastPress[this.ProfileId] == true)
+                || IsSprintEnabled
+                )
             {
-                // Send to Server
-
+                Dictionary<string, object> rotationPacket = new Dictionary<string, object>();
+                rotationPacket.Add("m", "PlayerRotate");
+                rotationPacket.Add("x", this.Rotation.x);
+                rotationPacket.Add("y", this.Rotation.y);
+                AkiBackendCommunicationCoop.PostLocalPlayerData(this, rotationPacket);
             }
 
             base.Rotate(deltaRotation, ignoreClamp);
         }
 
-        //public override void LateUpdate()
-        //{
-        //    //base.LateUpdate();
-        //}
+        public void ReceiveRotate(Vector2 rotation, bool ignoreClamp = false)
+        {
+            var prc = this.GetComponent<PlayerReplicatedComponent>();
+            if (prc == null || !prc.IsClientDrone)
+                return;
 
-        //public override void ComplexLateUpdate(EUpdateQueue queue, float deltaTime)
-        //{
-        //    //base.ComplexLateUpdate(queue, deltaTime);
-        //}
+            this.Rotation = rotation;
+            prc.ReplicatedRotation = rotation; 
+
+        }
+
 
         public override void Move(Vector2 direction)
         {
+            var prc = GetComponent<PlayerReplicatedComponent>();
+            if(prc == null)
+                return;
+
             base.Move(direction);
 
-            var prc = GetComponent<PlayerReplicatedComponent>();
             if (prc.IsClientDrone)
                 return;
 
 
         }
 
+        public override void OnPhraseTold(EPhraseTrigger @event, TaggedClip clip, TagBank bank, Speaker speaker)
+        {
+            base.OnPhraseTold(@event, clip, bank, speaker);
+
+            if (IsYourPlayer)
+            {
+                Dictionary<string, object> packet = new()
+                {
+                    { "event", @event.ToString() },
+                    { "index", clip.NetId },
+                    { "m", "Say" }
+                };
+                AkiBackendCommunicationCoop.PostLocalPlayerData(this, packet); 
+            }
+        }
+        
+        public void ReceiveSay(EPhraseTrigger trigger, int index)
+        {
+            BepInLogger.LogDebug($"{nameof(ReceiveSay)}({trigger},{index})");
+
+            var prc = GetComponent<PlayerReplicatedComponent>();
+            if (prc == null || !prc.IsClientDrone)
+                return;
+
+            Speaker.PlayDirect(trigger, index);
+        }
 
         public override void OnDestroy()
         {

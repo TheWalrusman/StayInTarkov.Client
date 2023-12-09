@@ -6,30 +6,12 @@ namespace StayInTarkov.Coop.Web
 {
     public class AkiBackendCommunicationCoop : AkiBackendCommunication
     {
-        static Random Randomizer { get; }
-
-        /// <summary>
-        /// Static Constructor is run when the Assembly is loaded
-        /// </summary>
-        static AkiBackendCommunicationCoop()
-        {
-            Randomizer = new Random();
-        }
-
-        /// <summary>
-        /// Constructor of this instance
-        /// </summary>
-        AkiBackendCommunicationCoop() : base(null)
-        {
-        }
-
         public static void PostLocalPlayerData(
             EFT.Player player
             , Dictionary<string, object> data
-            , bool useWebSocket = false
             )
         {
-            PostLocalPlayerData(player, data, useWebSocket, out _, out _);
+            PostLocalPlayerData(player, data, out _, out _);
         }
 
         /// <summary>
@@ -42,7 +24,6 @@ namespace StayInTarkov.Coop.Web
         public static void PostLocalPlayerData(
             EFT.Player player
             , Dictionary<string, object> data
-            , bool useWebSocket
             , out string returnedData
             , out Dictionary<string, object> generatedData)
         {
@@ -52,17 +33,13 @@ namespace StayInTarkov.Coop.Web
             {
                 data.Add("t", DateTime.Now.Ticks.ToString("G"));
             }
-            if (!data.ContainsKey("tkn"))
-            {
-                data.Add("tkn", Randomizer.NextDouble());
-            }
             if (!data.ContainsKey("serverId"))
             {
                 data.Add("serverId", CoopGameComponent.GetServerId());
             }
             if (!data.ContainsKey("profileId"))
             {
-                data.Add("profileId", player.ProfileId); // PatchConstants.GetPlayerProfileAccountId(profile));
+                data.Add("profileId", player.ProfileId);
             }
             AkiBackendCommunication.Instance.SendDataToPool("", data);
             generatedData = data;

@@ -14,14 +14,15 @@ using System.Threading.Tasks;
 
 namespace StayInTarkov.Coop
 {
-    internal class CoopInventoryController
+    internal sealed class CoopInventoryController
+        // At this point in time. PlayerOwnerInventoryController is required to fix Malfunction and Discard errors. This class needs to be replaced with PlayerInventoryController.
         : EFT.Player.PlayerOwnerInventoryController, ICoopInventoryController
     {
         ManualLogSource BepInLogger { get; set; }
 
         public HashSet<string> AlreadySent = new();
 
-		private EFT.Player player { get; set; }
+        private EFT.Player Player { get; set; }
 
 
         public CoopInventoryController(EFT.Player player, Profile profile, bool examined) : base(player, profile, examined)

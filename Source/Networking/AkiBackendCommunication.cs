@@ -1,10 +1,7 @@
-﻿using Aki.Custom.Airdrops;
-using Aki.Custom.Airdrops.Models;
-using BepInEx.Logging;
+﻿using BepInEx.Logging;
 using Comfort.Common;
 using EFT;
 using Newtonsoft.Json;
-using StayInTarkov.AkiSupport.Airdrops.Models;
 using StayInTarkov.Configuration;
 using StayInTarkov.Coop;
 using StayInTarkov.Coop.Matchmaker;
@@ -18,6 +15,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -198,12 +196,9 @@ namespace StayInTarkov.Networking
         private void WebSocket_OnError()
         {
             Logger.LogError($"Your PC has failed to connect and send data to the WebSocket with the port {PluginConfigSettings.Instance.CoopSettings.SITWebSocketPort} on the Server {StayInTarkovHelperConstants.GetBackendUrl()}! Application will now close.");
-            if (
-                CoopGameComponent.TryGetCoopGameComponent(out var coopGameComponent)
-                && coopGameComponent.LocalGameInstance != null
-                )
+            if (Singleton<ISITGame>.Instantiated)
             {
-                coopGameComponent.LocalGameInstance.Stop(Singleton<GameWorld>.Instance.MainPlayer.ProfileId, ExitStatus.Survived, null);
+                Singleton<ISITGame>.Instance.Stop(Singleton<GameWorld>.Instance.MainPlayer.ProfileId, Singleton<ISITGame>.Instance.MyExitStatus, Singleton<ISITGame>.Instance.MyExitLocation);
             }
             else
                 Application.Quit();
@@ -291,133 +286,14 @@ namespace StayInTarkov.Networking
                     return;
                 }
 
-                // Syncronize RaidTimer
-                if (packet.ContainsKey("RaidTimer"))
+                // Receiving a Player Extracted packet. Process into ExtractedPlayers List
+                if (packet.ContainsKey("Extracted"))
                 {
-                    if (MatchmakerAcceptPatches.IsClient)
+                    if (Singleton<ISITGame>.Instantiated && !Singleton<ISITGame>.Instance.ExtractedPlayers.Contains(packet["profileId"].ToString()))
                     {
-                        var raidTimer = new TimeSpan(long.Parse(packet["RaidTimer"].ToString()));
-                        Logger.LogInfo($"RaidTimer: Remaining session time {raidTimer.TraderFormat()}");
-
-                        if (coopGameComponent.LocalGameInstance is CoopGame coopGame)
-                        {
-                            var gameTimer = coopGame.GameTimer;
-                            if (gameTimer.StartDateTime.HasValue && gameTimer.SessionTime.HasValue)
-                            {
-                                if (gameTimer.PastTime.TotalSeconds < 3)
-                                    return;
-
-                                var timeRemain = gameTimer.PastTime + raidTimer;
-
-                                if (Math.Abs(gameTimer.SessionTime.Value.TotalSeconds - timeRemain.TotalSeconds) < 5)
-                                    return;
-
-                                Logger.LogInfo($"RaidTimer: New SessionTime {timeRemain.TraderFormat()}");
-                                gameTimer.ChangeSessionTime(timeRemain);
-
-                                // FIXME: Giving SetTime() with empty exfil point arrays has a known bug that may cause client game crashes!
-                                coopGame.GameUi.TimerPanel.SetTime(gameTimer.StartDateTime.Value, coopGame.Profile_0.Info.Side, gameTimer.SessionSeconds(), new EFT.Interactive.ExfiltrationPoint[] { });
-                            }
-                        }
+                        Logger.LogInfo(e.Data);
+                        Singleton<ISITGame>.Instance.ExtractedPlayers.Add(packet["profileId"].ToString());
                     }
-
-                    return;
-                }
-
-                // Time And Weather
-                if (packet.ContainsKey("TimeAndWeather"))
-                {
-                    if (MatchmakerAcceptPatches.IsClient)
-                    {
-                        Logger.LogDebug(packet.ToJson());
-
-                        var gameDateTime = new DateTime(long.Parse(packet["GameDateTime"].ToString()));
-                        if (coopGameComponent.LocalGameInstance is CoopGame coopGame && coopGame.GameDateTime != null)
-                            coopGame.GameDateTime.Reset(gameDateTime);
-
-                        var weatherController = EFT.Weather.WeatherController.Instance;
-                        if (weatherController != null)
-                        {
-                            var weatherDebug = weatherController.WeatherDebug;
-                            if (weatherDebug != null)
-                            {
-                                weatherDebug.Enabled = true;
-
-                                weatherDebug.CloudDensity = float.Parse(packet["CloudDensity"].ToString());
-                                weatherDebug.Fog = float.Parse(packet["Fog"].ToString());
-                                weatherDebug.LightningThunderProbability = float.Parse(packet["LightningThunderProbability"].ToString());
-                                weatherDebug.Rain = float.Parse(packet["Rain"].ToString());
-                                weatherDebug.Temperature = float.Parse(packet["Temperature"].ToString());
-                                weatherDebug.TopWindDirection = new(float.Parse(packet["TopWindDirection.x"].ToString()), float.Parse(packet["TopWindDirection.y"].ToString()));
-
-                                Vector2 windDirection = new(float.Parse(packet["WindDirection.x"].ToString()), float.Parse(packet["WindDirection.y"].ToString()));
-
-                                // working dog sh*t, if you are the programmer, DON'T EVER DO THIS! - dounai2333
-                                static bool BothPositive(float f1, float f2) => f1 > 0 && f2 > 0;
-                                static bool BothNegative(float f1, float f2) => f1 < 0 && f2 < 0;
-                                static bool VectorIsSameQuadrant(Vector2 v1, Vector2 v2, out int flag)
-                                {
-                                    flag = 0;
-                                    if (v1.x != 0 && v1.y != 0 && v2.x != 0 && v2.y != 0)
-                                    {
-                                        if (BothPositive(v1.x, v2.x) && BothPositive(v1.y, v2.y)
-                                        || BothNegative(v1.x, v2.x) && BothNegative(v1.y, v2.y)
-                                        || BothPositive(v1.x, v2.x) && BothNegative(v1.y, v2.y)
-                                        || BothNegative(v1.x, v2.x) && BothPositive(v1.y, v2.y))
-                                        {
-                                            flag = 1;
-                                            return true;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        if (v1.x != 0 && v2.x != 0)
-                                        {
-                                            if (BothPositive(v1.x, v2.x) || BothNegative(v1.x, v2.x))
-                                            {
-                                                flag = 1;
-                                                return true;
-                                            }
-                                        }
-                                        else if (v1.y != 0 && v2.y != 0)
-                                        {
-                                            if (BothPositive(v1.y, v2.y) || BothNegative(v1.y, v2.y))
-                                            {
-                                                flag = 2;
-                                                return true;
-                                            }
-                                        }
-                                    }
-                                    return false;
-                                }
-
-                                for (int i = 1; i < WeatherClass.WindDirections.Count(); i++)
-                                {
-                                    Vector2 direction = WeatherClass.WindDirections[i];
-                                    if (VectorIsSameQuadrant(windDirection, direction, out int flag))
-                                    {
-                                        weatherDebug.WindDirection = (EFT.Weather.WeatherDebug.Direction)i;
-                                        weatherDebug.WindMagnitude = flag switch
-                                        {
-                                            1 => windDirection.x / direction.x,
-                                            2 => windDirection.y / direction.y,
-                                            _ => weatherDebug.WindMagnitude
-                                        };
-                                        break;
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                Logger.LogError("TimeAndWeather: WeatherDebug is null!");
-                            }
-                        }
-                        else
-                        {
-                            Logger.LogError("TimeAndWeather: WeatherController is null!");
-                        }
-                    }
-
                     return;
                 }
 
@@ -430,30 +306,6 @@ namespace StayInTarkov.Networking
 
                     coopGameComponent.ServerHasStopped = true;
                     return;
-                }
-
-                if (Singleton<SITAirdropsManager>.Instantiated 
-                    && packet.ContainsKey("m") 
-                    && packet["m"].ToString().StartsWith("Airdrop")
-                    )
-                {
-                    if (packet["m"].ToString() == "AirdropPacket")
-                    {
-                        Logger.LogInfo("--- RAW AIRDROP PACKET ---");
-                        Logger.LogInfo(packet.SITToJson());
-
-                        Singleton<SITAirdropsManager>.Instance.AirdropParameters = packet["model"].ToString().SITParseJson<AirdropParametersModel>();
-                    }
-
-                    if (packet["m"].ToString() == "AirdropLootPacket")
-                    {
-                        Logger.LogInfo("--- RAW AIRDROP-LOOT PACKET ---");
-                        Logger.LogInfo(packet.SITToJson());
-
-                        Singleton<SITAirdropsManager>.Instance.ReceiveBuildLootContainer
-                            (packet["result"].ToString().SITParseJson<AirdropLootResultModel>()
-                            , packet["config"].ToString().SITParseJson<AirdropConfigModel>());
-                    }
                 }
 
                 // If this is a SIT serialization packet
@@ -760,7 +612,7 @@ namespace StayInTarkov.Networking
         }
 
         /// <summary>
-        /// TODO: Replace this with a HTTPClient Post command. 
+        /// Send request to the server and get Stream of data back by post
         /// </summary>
         /// <param name="uri"></param>
         /// <param name="method"></param>
@@ -771,78 +623,85 @@ namespace StayInTarkov.Networking
         /// <returns></returns>
         MemoryStream SendAndReceivePostOld(Uri uri, string method = "GET", string data = null, bool compress = true, int timeout = 9999, bool debug = false)
         {
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(uri);
-            request.ServerCertificateValidationCallback = delegate { return true; };
-
-            foreach (var item in GetHeaders())
+            using (HttpClientHandler handler = new HttpClientHandler())
             {
-                request.Headers.Add(item.Key, item.Value);
-            }
-
-            if (!debug && method == "POST")
-            {
-                request.Headers.Add("Accept-Encoding", "deflate");
-            }
-
-            request.Method = method;
-            request.Timeout = timeout;
-
-            if (!string.IsNullOrEmpty(data))
-            {
-                if (debug && method == "POST")
+                using(HttpClient httpClient = new HttpClient(handler))
                 {
-                    compress = false;
-                    request.Headers.Add("debug", "1");
-                }
-
-                // set request body
-                var inputDataBytes = Encoding.UTF8.GetBytes(data);
-                //byte[] bytes = compress ? Zlib.Compress(inputDataBytes, ZlibCompression.Fastest) : inputDataBytes;
-                byte[] bytes = compress ? Zlib.Compress(data) : inputDataBytes;
-                data = null;
-                request.ContentType = "application/json";
-                request.ContentLength = bytes.Length;
-                if (compress)
-                    request.Headers.Add("content-encoding", "deflate");
-
-                try
-                {
-                    using (Stream stream = request.GetRequestStream())
+                    handler.UseCookies = true;
+                    handler.CookieContainer = new CookieContainer();
+                    httpClient.Timeout = TimeSpan.FromMilliseconds(timeout);
+                    Uri baseAddress = new Uri(RemoteEndPoint);
+                    foreach (var item in GetHeaders())
                     {
-                        stream.Write(bytes, 0, bytes.Length);
-                    }
-                }
-                catch (Exception e)
-                {
-                    StayInTarkovHelperConstants.Logger.LogError(e);
-                }
-                finally
-                {
-                    bytes = null;
-                    inputDataBytes = null;
-                }
-            }
+                        if (item.Key == "Cookie")
+                        {
+                            string[] pairs = item.Value.Split(';');
+                            var keyValuePairs = pairs
+                                .Select(p => p.Split(new[] { '=' }, 2))
+                                .Where(kvp => kvp.Length == 2)
+                                .ToDictionary(kvp => kvp[0], kvp => kvp[1]);
+                            foreach (var kvp in keyValuePairs)
+                            {
+                                handler.CookieContainer.Add(baseAddress, new Cookie(kvp.Key, kvp.Value));
+                            }
+                        }
+                        else
+                        {
+                            httpClient.DefaultRequestHeaders.TryAddWithoutValidation(item.Key, item.Value);
+                        }
 
-            // get response stream
-            var ms = new MemoryStream();
-            try
-            {
-                using (var response = request.GetResponse())
-                {
-                    using (var responseStream = response.GetResponseStream())
+                    }
+                    if (!debug && method == "POST")
+                    {
+                        httpClient.DefaultRequestHeaders.AcceptEncoding.TryParseAdd("deflate");
+                    }
+
+                    HttpContent byteContent = null;
+                    if (method.Equals("POST", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(data))
+                    {
+                        if (debug)
+                        {
+                            compress = false;
+                            httpClient.DefaultRequestHeaders.Add("debug", "1");
+                        }
+                        var inputDataBytes = Encoding.UTF8.GetBytes(data);
+                        byte[] bytes = compress ? Zlib.Compress(data) : inputDataBytes;
+                        byteContent = new ByteArrayContent(bytes);
+                        byteContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                        if (compress)
+                        {
+                            byteContent.Headers.ContentEncoding.Add("deflate");
+                        }
+                    }
+
+                    HttpResponseMessage response;
+                    if (byteContent != null)
+                    {
+                        response = httpClient.PostAsync(uri, byteContent).Result;
+                    }
+                    else
+                    {
+                        response = method.Equals("POST", StringComparison.OrdinalIgnoreCase)
+                            ? httpClient.PostAsync(uri, null).Result
+                            : httpClient.GetAsync(uri).Result;
+                    }
+
+                    var ms = new MemoryStream();
+                    if (response.IsSuccessStatusCode)
+                    {
+                        Stream responseStream = response.Content.ReadAsStreamAsync().Result;
                         responseStream.CopyTo(ms);
+                        responseStream.Dispose();
+                    }
+                    else
+                    {
+                        StayInTarkovHelperConstants.Logger.LogError($"Unable to send api request to server.Status code" + response.StatusCode);
+                    }
+
+                    return ms;
                 }
+
             }
-            catch (Exception e)
-            {
-                StayInTarkovHelperConstants.Logger.LogError(e);
-            }
-            finally
-            {
-                request = null;
-                uri = null;
-            }
-            return ms;
         }
 
         public byte[] GetData(string url, bool hasHost = false)

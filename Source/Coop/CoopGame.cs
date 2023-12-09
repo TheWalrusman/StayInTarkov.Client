@@ -24,7 +24,7 @@ using UnityEngine;
 
 namespace StayInTarkov.Coop
 {
-    public class FriendlyAIPMCSystem
+    public sealed class FriendlyAIPMCSystem
     {
         /// <summary>
         /// This spawns bots but does nothing. DO NOT USE!
@@ -41,14 +41,14 @@ namespace StayInTarkov.Coop
     /// <summary>
     /// A custom Game Type
     /// </summary>
-    public sealed class CoopGame : BaseLocalGame<GamePlayerOwner>, IBotGame, ISITGame
+    internal sealed class CoopGame : BaseLocalGame<GamePlayerOwner>, IBotGame, ISITGame
     {
 
         public new bool InRaid { get { return true; } }
 
         public FriendlyAIPMCSystem FriendlyAIPMCSystem { get; set; } = new FriendlyAIPMCSystem();
 
-        public IBackEndSession BackEndSession { get { return StayInTarkovHelperConstants.BackEndSession; } }
+        public ISession BackEndSession { get { return StayInTarkovHelperConstants.BackEndSession; } }
 
         BotsController IBotGame.BotsController
         {
@@ -107,7 +107,7 @@ namespace StayInTarkov.Coop
             , Callback<ExitStatus, TimeSpan, ClientMetrics> callback
             , float fixedDeltaTime
             , EUpdateQueue updateQueue
-            , IBackEndSession backEndSession
+            , ISession backEndSession
             , TimeSpan sessionTime)
         {
             BotsController = null;
@@ -134,7 +134,7 @@ namespace StayInTarkov.Coop
                 (null, new object[] {
                     coopGame.gameObject
                     , location.waves
-                    , new Action<Wave>((wave) => coopGame.PBotsController.ActivateBotsByWave(wave))
+                    , new Action<BotSpawnWave>((wave) => coopGame.PBotsController.ActivateBotsByWave(wave))
                     , location });
 
             var bosswavemanagerValue = ReflectionHelpers.GetMethodForType(typeof(BossWaveManager), "smethod_0").Invoke
@@ -281,7 +281,8 @@ namespace StayInTarkov.Coop
                     Dictionary<string, object> raidTimerDict = new()
                     {
                         { "serverId", coopGameComponent.ServerId },
-                        { "RaidTimer", (GameTimer.SessionTime - GameTimer.PastTime).Value.Ticks },
+                        { "m", "RaidTimer" },
+                        { "sessionTime", (GameTimer.SessionTime - GameTimer.PastTime).Value.Ticks },
                     };
                     AkiBackendCommunication.Instance.SendDataToPool(raidTimerDict.ToJson());
                 }
@@ -299,9 +300,11 @@ namespace StayInTarkov.Coop
                 if (!CoopGameComponent.TryGetCoopGameComponent(out var coopGameComponent))
                     yield break;
 
-                Dictionary<string, object> timeAndWeatherDict = new();
-                timeAndWeatherDict.Add("TimeAndWeather", true);
-                timeAndWeatherDict.Add("serverId", coopGameComponent.ServerId);
+                Dictionary<string, object> timeAndWeatherDict = new()
+                {
+                    { "serverId", coopGameComponent.ServerId },
+                    { "m", "TimeAndWeather" }
+                };
 
                 if (GameDateTime != null)
                     timeAndWeatherDict.Add("GameDateTime", GameDateTime.Calculate().Ticks);
@@ -325,8 +328,9 @@ namespace StayInTarkov.Coop
                         timeAndWeatherDict.Add("TopWindDirection.y", weatherCurve.TopWind.y);
                     }
 
-                    Logger.LogDebug(timeAndWeatherDict.ToJson());
-                    AkiBackendCommunication.Instance.SendDataToPool(timeAndWeatherDict.ToJson());
+                    string packet = timeAndWeatherDict.ToJson();
+                    Logger.LogDebug(packet);
+                    AkiBackendCommunication.Instance.SendDataToPool(packet);
                 }
             }
         }
@@ -835,7 +839,7 @@ namespace StayInTarkov.Coop
             SpawnPoints spawnPoints = SpawnPoints.CreateFromScene(DateTime.Now, base.Location_0.SpawnPointParams);
             int spawnSafeDistance = ((Location_0.SpawnSafeDistanceMeters > 0) ? Location_0.SpawnSafeDistanceMeters : 100);
             SpawnSystemSettings settings = new(Location_0.MinDistToFreePoint, Location_0.MaxDistToFreePoint, Location_0.MaxBotPerZone, spawnSafeDistance);
-            SpawnSystem = SpawnSystemFactory.CreateSpawnSystem(settings, () => Time.time, Singleton<GameWorld>.Instance, PBotsController, spawnPoints);
+            SpawnSystem = SpawnSystemFactory.CreateSpawnSystem(settings, () => UnityEngine.Time.time, Singleton<GameWorld>.Instance, PBotsController, spawnPoints);
 
             base.GameTimer.Start();
             //base.vmethod_5();
@@ -868,6 +872,9 @@ namespace StayInTarkov.Coop
 
         private void ExfiltrationPoint_OnCancelExtraction(ExfiltrationPoint point, EFT.Player player)
         {
+            if (player.IsAI)
+                return;
+
             Logger.LogDebug("ExfiltrationPoint_OnCancelExtraction");
             Logger.LogDebug(point.Status);
 
@@ -879,6 +886,9 @@ namespace StayInTarkov.Coop
 
         private void ExfiltrationPoint_OnStartExtraction(ExfiltrationPoint point, EFT.Player player)
         {
+            if (player.IsAI)
+                return;
+
             Logger.LogDebug("ExfiltrationPoint_OnStartExtraction");
             Logger.LogDebug(point.Settings.Name);
             Logger.LogDebug(point.Status);

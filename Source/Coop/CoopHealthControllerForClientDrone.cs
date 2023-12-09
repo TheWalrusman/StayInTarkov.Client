@@ -4,9 +4,9 @@ using EFT.InventoryLogic;
 
 namespace StayInTarkov.Coop
 {
-    internal class CoopHealthControllerForClientDrone : PlayerHealthController
+    internal sealed class CoopHealthControllerForClientDrone : PlayerHealthController
     {
-        public CoopHealthControllerForClientDrone(Profile.Health0 healthInfo, EFT.Player player, InventoryController inventoryController, SkillManager skillManager, bool aiHealth)
+        public CoopHealthControllerForClientDrone(Profile.ProfileHealth healthInfo, EFT.Player player, InventoryController inventoryController, SkillManager skillManager, bool aiHealth)
             : base(healthInfo, player, inventoryController, skillManager, aiHealth)
         {
         }
@@ -26,7 +26,7 @@ namespace StayInTarkov.Coop
             return base.ApplyItem(item, bodyPart, amount);
         }
 
-        protected override void AddEffectToList(AbstractHealthEffect effect)
+        protected override void AddEffectToList(AbstractEffect effect)
         {
             base.AddEffectToList(effect);
         }
