@@ -1,12 +1,15 @@
-﻿using EFT.InventoryLogic;
+﻿using EFT;
+using EFT.InventoryLogic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SIT.Core.Coop.NetworkPacket;
+using StayInTarkov;
 using StayInTarkov.Coop;
 using StayInTarkov.Coop.Components;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 
 namespace SIT.Core.Coop.PacketHandlers
 {
@@ -42,11 +45,52 @@ namespace SIT.Core.Coop.PacketHandlers
 
             _processedPackets.Add(packetJson);
 
+            ProcessPolymorphOperation(ref packet);
             ProcessMoveOperation(ref packet);
             ProcessThrowOperation(ref packet);
             ProcessFoldOperation(ref packet);
             ProcessSearchOperation(ref packet);
 
+        }
+
+        private void ProcessPolymorphOperation(ref Dictionary<string, object> packet)
+        {
+            if (packet["m"].ToString() != "PolymorphInventoryOperation")
+                return;
+
+            var packetJson = packet.ToJson();
+
+            var plyr = Players[packet["profileId"].ToString()];
+            var pic = ItemFinder.GetPlayerInventoryController(plyr) as CoopInventoryController;
+            if (pic == null)
+            {
+                Logger.LogError("Player Inventory Controller is null");
+                return;
+            }
+
+            var data = packet["d"];
+            AbstractDescriptor1 descriptor = null;
+            using (MemoryStream memoryStream = new MemoryStream(packet["d"].ToString().SITParseJson<byte[]>()))
+            {
+                using (BinaryReader binaryReader = new BinaryReader(memoryStream))
+                {
+                    descriptor = binaryReader.ReadPolymorph<AbstractDescriptor1>();
+                }
+            }
+
+            var operationResult = plyr.ToInventoryOperation(descriptor);
+            if (operationResult.Succeeded)
+            {
+                pic.ReceiveExecute(operationResult.Value, packetJson);
+            }
+            else
+            {
+                if(operationResult.Failed)
+                {
+                    Logger.LogError(operationResult.Error);
+                }
+                pic.CancelExecute(packetJson);
+            }
         }
 
         private void ProcessFoldOperation(ref Dictionary<string, object> packet)

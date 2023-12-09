@@ -8,6 +8,7 @@ using StayInTarkov.Coop.NetworkPacket;
 using StayInTarkov.Networking;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
@@ -126,6 +127,7 @@ namespace StayInTarkov.Coop
             BepInLogger.LogInfo($"SendExecute");
             BepInLogger.LogInfo($"{operation.GetType()}");
             BepInLogger.LogInfo($"{operation}");
+
             //ReflectionHelpers.SetFieldOrPropertyFromInstance<CommandStatus>(operation, "commandStatus_0", CommandStatus.Begin);
             RaiseInvEvents(operation, CommandStatus.Begin);
 
@@ -201,8 +203,25 @@ namespace StayInTarkov.Coop
 
                 json = moveOperationPacket.SITToJson();
             }
+            else if (operation is FoldOperation foldOperation)
+            {
+                var foDescriptor = OperationToDescriptorHelpers.FromFoldOperation(foldOperation);
+                using MemoryStream memoryStream = new();
+                using BinaryWriter binaryWriter = new(memoryStream);
+                binaryWriter.WritePolymorph(foDescriptor);
 
+                Dictionary<string, object> dictionary = new()
+                {
+                    { "i", operation.Id },
+                    { "profileId", Player.ProfileId },
+                    { "d", memoryStream.ToArray().SITToJson() },
+                    { "ct", operation.GetType().Name },
+                    { "m", "PolymorphInventoryOperation" }
+                };
 
+                json = dictionary.SITToJson();
+
+            }
             else 
             {
                 var oneitemoperation = operation as IOneItemOperation;
