@@ -145,7 +145,7 @@ namespace StayInTarkov.Coop.Components
                         continue;
 
                     var coopPlayer = (CoopPlayer)playerKVP;
-                    coopPlayer.ReceiveDamageFromServer(packet);
+                    //coopPlayer.ReceiveDamageFromServer(packet);
                 }
                 if (stopwatchActionPacketsDamage.ElapsedMilliseconds > 1)
                 {
@@ -210,14 +210,14 @@ namespace StayInTarkov.Coop.Components
                     ReplicateAirdropLoot(packet);
                     result = true;
                     break;
-                case "RaidTimer":
-                    ReplicateRaidTimer(packet);
-                    result = true;
-                    break;
-                case "TimeAndWeather":
-                    ReplicateTimeAndWeather(packet);
-                    result = true;
-                    break;
+                //case "RaidTimer":
+                //    ReplicateRaidTimer(packet);
+                //    result = true;
+                //    break;
+                //case "TimeAndWeather":
+                //    ReplicateTimeAndWeather(packet);
+                //    result = true;
+                //    break;
                 case "LootableContainer_Interact":
                     LootableContainer_Interact_Patch.Replicated(packet);
                     result = true;
@@ -229,7 +229,6 @@ namespace StayInTarkov.Coop.Components
 
         bool ProcessPlayerPacket(Dictionary<string, object> packet)
         {
-
             if (packet == null)
                 return true;
 

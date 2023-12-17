@@ -1,25 +1,46 @@
 ﻿using Comfort.Common;
 using EFT;
+using EFT.Weather;
 using LiteNetLib;
 using LiteNetLib.Utils;
+using StayInTarkov.Configuration;
 using StayInTarkov.Coop;
-using StayInTarkov.Coop.NetworkPacket;
-using System.Linq;
+using StayInTarkov.Networking.Packets;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using UnityEngine;
+using static StayInTarkov.Networking.SITSerialization;
+
+/* 
+* This code has been written by Lacyway (https://github.com/Lacyway) for the SIT Project (https://github.com/stayintarkov/StayInTarkov.Client). 
+* You are free to re-use this in your own project, but out of respect please leave credit where it's due according to the MIT License.
+*/
 
 namespace StayInTarkov.Networking
 {
     public class SITServer : MonoBehaviour, INetEventListener, INetLogger
     {
         private LiteNetLib.NetManager _netServer;
-        public NetDataWriter _dataWriter;
+        public NetPacketProcessor _packetProcessor = new();
+        private NetDataWriter _dataWriter = new NetDataWriter();
+
+        public ConcurrentDictionary<string, EFT.Player> Players => CoopGameComponent.Players;
+        private CoopGameComponent CoopGameComponent { get; set; }
 
         public void Start()
         {
             NetDebug.Logger = this;
-            _dataWriter = new NetDataWriter();
+
+            _packetProcessor.RegisterNestedType(Vector3Utils.Serialize, Vector3Utils.Deserialize);
+            _packetProcessor.RegisterNestedType(Vector2Utils.Serialize, Vector2Utils.Deserialize);
+            _packetProcessor.RegisterNestedType(PhysicalUtils.Serialize, PhysicalUtils.Deserialize);
+
+            _packetProcessor.SubscribeNetSerializable<PlayerStatePacket, NetPeer>(OnPlayerStatePacketReceived);
+            _packetProcessor.SubscribeNetSerializable<GameTimerPacket, NetPeer>(OnGameTimerPacketReceived);
+            _packetProcessor.SubscribeNetSerializable<WeatherPacket, NetPeer>(OnWeatherPacketReceived);
+            _packetProcessor.SubscribeNetSerializable<WeaponPacket, NetPeer>(OnFirearmControllerPacketReceived);
+
             _netServer = new LiteNetLib.NetManager(this)
             {
                 BroadcastReceiveEnabled = true,
@@ -27,11 +48,94 @@ namespace StayInTarkov.Networking
                 AutoRecycle = true,
                 IPv6Enabled = false
             };
-            var ip = "127.0.0.1";
-            _netServer.Start(IPAddress.Parse(ip), IPAddress.IPv6Any, 5000);
+
+            _netServer.Start(PluginConfigSettings.Instance.CoopSettings.SITGamePlayPort);
+
             EFT.UI.ConsoleScreen.Log("Started SITServer");
-            NotificationManagerClass.DisplayMessageNotification($"Server started on {ip}.",
+            NotificationManagerClass.DisplayMessageNotification($"Server started on port {_netServer.LocalPort}.",
                 EFT.Communications.ENotificationDurationType.Default, EFT.Communications.ENotificationIconType.EntryPoint);
+        }
+
+        private void OnFirearmControllerPacketReceived(WeaponPacket packet, NetPeer peer)
+        {
+            if (!Players.ContainsKey(packet.ProfileId))
+                return;
+
+            _dataWriter.Reset();
+            SendDataToAll(_dataWriter, ref packet, DeliveryMethod.ReliableOrdered);
+
+            var playerToApply = Players[packet.ProfileId] as CoopPlayer;
+            if (playerToApply != default && playerToApply != null && !playerToApply.IsYourPlayer)
+            {
+                playerToApply.FirearmPackets.Enqueue(packet);
+            }
+        }
+
+        private void OnWeatherPacketReceived(WeatherPacket packet, NetPeer peer)
+        {
+            EFT.UI.ConsoleScreen.Log($"Received weather synchronization packet. IsRequest: {packet.IsRequest}");
+            if (!packet.IsRequest)
+                return;
+
+            var weatherController = WeatherController.Instance;
+            if (weatherController != null)
+            {
+                WeatherPacket weatherPacket = new();
+                if (weatherController.CloudsController != null)
+                    weatherPacket.CloudDensity = weatherController.CloudsController.Density;
+
+                var weatherCurve = weatherController.WeatherCurve;
+                if (weatherCurve != null)
+                {
+                    weatherPacket.Fog = weatherCurve.Fog;
+                    weatherPacket.LightningThunderProbability = weatherCurve.LightningThunderProbability;
+                    weatherPacket.Rain = weatherCurve.Rain;
+                    weatherPacket.Temperature = weatherCurve.Temperature;
+                    weatherPacket.WindX = weatherCurve.Wind.x;
+                    weatherPacket.WindY = weatherCurve.Wind.y;
+                    weatherPacket.TopWindX = weatherCurve.TopWind.x;
+                    weatherPacket.TopWindY = weatherCurve.TopWind.y;
+                }
+
+                _dataWriter.Reset();
+                SendDataToPeer(peer, _dataWriter, ref weatherPacket, DeliveryMethod.ReliableOrdered);
+            }
+        }
+
+        private void OnGameTimerPacketReceived(GameTimerPacket packet, NetPeer peer)
+        {
+            EFT.UI.ConsoleScreen.Log($"Received game timer synchronization packet. IsRequest: {packet.IsRequest}");
+            if (!packet.IsRequest)
+                return;
+
+            var game = (CoopGame)Singleton<AbstractGame>.Instance;
+            if (game != null)
+            {
+                GameTimerPacket gameTimerPacket = new(false, (game.GameTimer.SessionTime - game.GameTimer.PastTime).Value.Ticks);
+                _dataWriter.Reset();
+                SendDataToPeer(peer, _dataWriter, ref gameTimerPacket, DeliveryMethod.ReliableOrdered);
+            }
+            else
+            {
+                EFT.UI.ConsoleScreen.Log("OnGameTimerPacketReceived: Game was null!");
+            }
+        }
+
+        private void OnPlayerStatePacketReceived(PlayerStatePacket packet, NetPeer peer)
+        {
+            if (!Players.ContainsKey(packet.ProfileId))
+                return;            
+
+            var playerToApply = Players[packet.ProfileId] as CoopPlayer;
+            if (playerToApply != default && playerToApply != null && !playerToApply.IsYourPlayer)
+            {
+                playerToApply.NewState = packet;                
+            }
+        }
+
+        public void Awake()
+        {
+            CoopGameComponent = CoopPatches.CoopGameComponentParent.GetComponent<CoopGameComponent>();
         }
 
         void Update()
@@ -46,15 +150,21 @@ namespace StayInTarkov.Networking
                 _netServer.Stop();
         }
 
-        public void SendData(NetDataWriter dataWriter, DeliveryMethod deliveryMethod)
+        public void SendDataToAll<T>(NetDataWriter writer, ref T packet, DeliveryMethod deliveryMethod) where T : INetSerializable
         {
-            _netServer.SendToAll(dataWriter, deliveryMethod);
+            _packetProcessor.WriteNetSerializable(writer, ref packet);
+            _netServer.SendToAll(writer, deliveryMethod);
+        }
+
+        public void SendDataToPeer<T>(NetPeer peer, NetDataWriter writer, ref T packet, DeliveryMethod deliveryMethod) where T : INetSerializable
+        {
+            _packetProcessor.WriteNetSerializable(writer, ref packet);
+            peer.Send(writer, deliveryMethod);
         }
 
         public void OnPeerConnected(NetPeer peer)
         {
-            EFT.UI.ConsoleScreen.Log("[SERVER] We have new peer " + peer.EndPoint);
-            NotificationManagerClass.DisplayMessageNotification($"Peer {peer.Id} connected to server.",
+            NotificationManagerClass.DisplayMessageNotification($"Peer {peer.EndPoint} connected to server.",
                 EFT.Communications.ENotificationDurationType.Default, EFT.Communications.ENotificationIconType.Friend);
         }
 
@@ -63,8 +173,7 @@ namespace StayInTarkov.Networking
             EFT.UI.ConsoleScreen.Log("[SERVER] error " + socketErrorCode);
         }
 
-        public void OnNetworkReceiveUnconnected(IPEndPoint remoteEndPoint, NetPacketReader reader,
-            UnconnectedMessageType messageType)
+        public void OnNetworkReceiveUnconnected(IPEndPoint remoteEndPoint, NetPacketReader reader, UnconnectedMessageType messageType)
         {
             if (messageType == UnconnectedMessageType.Broadcast)
             {
@@ -96,14 +205,7 @@ namespace StayInTarkov.Networking
 
         public void OnNetworkReceive(NetPeer peer, NetPacketReader reader, byte channelNumber, DeliveryMethod deliveryMethod)
         {
-            PlayerStatePacket pSP = new();
-            pSP.Deserialize(reader);
-
-            var playerToApply = Singleton<GameWorld>.Instance.allAlivePlayersByID[pSP.ProfileId] as CoopPlayer;
-            if (playerToApply != null && !playerToApply.IsYourPlayer)
-            {
-                playerToApply.ApplyStatePacket(pSP);
-            }
+            _packetProcessor.ReadAllPackets(reader, peer);
         }
     }
 }
