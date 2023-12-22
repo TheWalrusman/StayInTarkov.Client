@@ -26,7 +26,7 @@ namespace StayInTarkov.Coop.Players
     {
         public CoopPlayer MainPlayer => Singleton<GameWorld>.Instance.MainPlayer as CoopPlayer;
         private float InterpolationRatio { get; set; } = 0.5f;
-        public bool IsObservedAI = true;
+        public bool IsObservedAI;
 
         public static async Task<LocalPlayer> CreateObservedPlayer(
             int playerId,
@@ -264,6 +264,8 @@ namespace StayInTarkov.Coop.Players
 
             if (ProfileId.StartsWith("pmc"))
                 IsObservedAI = false;
+            else
+                IsObservedAI = true;
 
             WeaponPacket = new(ProfileId);
             HealthPacket = new(ProfileId);

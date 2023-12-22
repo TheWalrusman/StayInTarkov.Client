@@ -764,12 +764,12 @@ namespace StayInTarkov.Coop
                     }
                     else
                     {
-                        yield return new WaitForSeconds(5);
+                        yield return new WaitForSeconds(2);
                     }
                 }
                 else
                 {
-                    yield return new WaitForSeconds(5);
+                    yield return new WaitForSeconds(2);
                 }                
             }
         }
@@ -1198,7 +1198,7 @@ namespace StayInTarkov.Coop
             {
                 GUI.contentColor = Color.white;
                 GUI.contentColor = MyPlayer.Client.Ping >= AkiBackendCommunication.PING_LIMIT_HIGH ? Color.red : ServerPing >= AkiBackendCommunication.PING_LIMIT_MID ? Color.yellow : Color.green;
-                GUI.Label(rect, $"Ping:{MyPlayer.Client.Ping}");
+                GUI.Label(rect, $"Ping: {MyPlayer.Client.Ping}");
                 rect.y += 15;
                 GUI.contentColor = Color.white; 
             }

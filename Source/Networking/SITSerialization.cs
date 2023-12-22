@@ -752,17 +752,20 @@ namespace StayInTarkov.Networking
         public struct ObservedDeathPacket()
         {
             public EDamageType DamageType { get; set; }
+            public string ProfileId { get; set; } = "null";
 
             public static ObservedDeathPacket Deserialize(NetDataReader reader)
             {
                 return new ObservedDeathPacket() 
                 {
                     DamageType = (EDamageType)reader.GetInt(),
+                    ProfileId = reader.GetString()
                 };
             }
             public static void Serialize(NetDataWriter writer, ObservedDeathPacket packet)
             {
                 writer.Put((int)packet.DamageType);
+                writer.Put(packet.ProfileId);
             }
         }
 

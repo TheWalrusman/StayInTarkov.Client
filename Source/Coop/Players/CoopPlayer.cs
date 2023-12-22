@@ -39,6 +39,7 @@ namespace StayInTarkov.Coop.Players
         public InventoryPacketQueue InventoryPackets = new(100);
         public CommonPlayerPacket CommonPlayerPacket = new("null");
         public CommonPlayerPacketQueue CommonPlayerPackets { get; set; } = new(100);
+        private bool HasDied = false;
 
         public static async Task<LocalPlayer> Create(
             int playerId,
@@ -912,6 +913,22 @@ namespace StayInTarkov.Coop.Players
             }
         }
 
+        public override void OnDead(EDamageType damageType)
+        {
+            if (!HasDied)
+            {
+                HealthPacket.HasObservedDeathPacket = true;
+                HealthPacket.ObservedDeathPacket = new()
+                {
+                    DamageType = damageType,
+                    ProfileId = (LastDamageInfo.Player != null && LastDamageInfo.Player.iPlayer != null) ? LastDamageInfo.Player.iPlayer.ProfileId : "null"
+                };
+                HealthPacket.ToggleSend(); 
+            }
+            HasDied = true;
+            base.OnDead(damageType);
+        }
+
         protected virtual void HandleInventoryPacket()
         {
             var packet = InventoryPackets.Dequeue();
@@ -999,32 +1016,10 @@ namespace StayInTarkov.Coop.Players
                 if (packet.HasMalfunction)
                 {
                     firearmController.Weapon.MalfState.ChangeStateSilent(packet.MalfunctionState);
-                    //if (packet.MalfunctionState)
-                    //{
-                    //    firearmController.Weapon.MalfState.ChangeStateSilent(packet.MalfunctionState);
-                    //    //firearmController.Malfunction = true;
-                    //    //firearmController.FirearmsAnimator.MisfireSlideUnknown(true);
-                    //    //firearmController.FirearmsAnimator.Malfunction((int)packet.MalfunctionState);
-                    //    //switch (packet.MalfunctionState)
-                    //    //{
-                    //    //    case Weapon.EMalfunctionState.Misfire:
-                    //    //        firearmController.FirearmsAnimator.Animator.Play("MISFIRE", 1, 0f);
-                    //    //        break;
-                    //    //    case Weapon.EMalfunctionState.Jam:
-                    //    //        firearmController.FirearmsAnimator.Animator.Play("JAM", 1, 0f);
-                    //    //        break;
-                    //    //    case Weapon.EMalfunctionState.HardSlide:
-                    //    //        firearmController.FirearmsAnimator.Animator.Play("HARD_SLIDE", 1, 0f);
-                    //    //        break;
-                    //    //    case Weapon.EMalfunctionState.SoftSlide:
-                    //    //        firearmController.FirearmsAnimator.Animator.Play("SOFT_SLIDE", 1, 0f);
-                    //    //        break;
-                    //    //    case Weapon.EMalfunctionState.Feed:
-                    //    //        firearmController.FirearmsAnimator.Animator.Play("FEED", 1, 0f);
-                    //    //        break;
-                    //    //}
-                    //    //firearmController.EmitEvents(); 
-                    //}
+                    if (packet.MalfunctionState != Weapon.EMalfunctionState.None)
+                    {
+                        firearmController.Weapon.MalfState.AddPlayerWhoKnowMalfunction(Profile.Id, false);
+                    }
                 }
 
                 firearmController.SetTriggerPressed(false);
@@ -1237,33 +1232,33 @@ namespace StayInTarkov.Coop.Players
 
             if (packet.HasGrenadePacket)
             {
-                if (HandsController is GrenadeController controller)
+                if (HandsController is GrenadeController grenadeController)
                 {
                     switch (packet.GrenadePacket.PacketType)
                     {
                         case SITSerialization.GrenadePacket.GrenadePacketType.ExamineWeapon:
                             {
-                                controller.ExamineWeapon();
+                                grenadeController.ExamineWeapon();
                                 break;
                             }
                         case SITSerialization.GrenadePacket.GrenadePacketType.HighThrow:
                             {
-                                controller.HighThrow();
+                                grenadeController.HighThrow();
                                 break;
                             }
                         case SITSerialization.GrenadePacket.GrenadePacketType.LowThrow:
                             {
-                                controller.LowThrow();
+                                grenadeController.LowThrow();
                                 break;
                             }
                         case SITSerialization.GrenadePacket.GrenadePacketType.PullRingForHighThrow:
                             {
-                                controller.PullRingForHighThrow();
+                                grenadeController.PullRingForHighThrow();
                                 break;
                             }
                         case SITSerialization.GrenadePacket.GrenadePacketType.PullRingForLowThrow:
                             {
-                                controller.PullRingForLowThrow();
+                                grenadeController.PullRingForLowThrow();
                                 break;
                             }
                     }
@@ -1356,10 +1351,22 @@ namespace StayInTarkov.Coop.Players
 
             if (packet.HasObservedDeathPacket)
             {
+                EFT.UI.ConsoleScreen.Log("deathpacket");
                 if (HandsController is FirearmController firearmController)
                 {
                     firearmController.SetTriggerPressed(false);
                 }
+                if (packet.ObservedDeathPacket.ProfileId != "null")
+                {
+                    EFT.UI.ConsoleScreen.Log("death profileid nt null");
+                    var player = Singleton<GameWorld>.Instance.GetAlivePlayerByProfileID(packet.ObservedDeathPacket.ProfileId);
+                    if (player != null)
+                    {
+                        EFT.UI.ConsoleScreen.Log("death player was not null");
+                        LastAggressor = player;
+                    }
+                }
+                HasDied = true;
                 ActiveHealthController.Kill(packet.ObservedDeathPacket.DamageType);             
             }
         }
