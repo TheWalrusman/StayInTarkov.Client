@@ -625,8 +625,7 @@ namespace StayInTarkov.Coop
 
         private void ReadFromServerCharacters()
         {
-            var myPlayer = OwnPlayer as CoopPlayer;
-            AllCharacterRequestPacket requestPacket = new(myPlayer.ProfileId)
+            AllCharacterRequestPacket requestPacket = new(profileId: MyPlayer.ProfileId)
             {
                 CharactersAmount = Players.Count()
             };
@@ -635,7 +634,7 @@ namespace StayInTarkov.Coop
             {
                 requestPacket.Characters[i] = Players.ElementAt(i).Key;
             }
-            myPlayer.Client.SendData(myPlayer.Writer, ref requestPacket, LiteNetLib.DeliveryMethod.ReliableOrdered);            
+            MyPlayer.Client.SendData(MyPlayer.Writer, ref requestPacket, LiteNetLib.DeliveryMethod.ReliableOrdered);
         }
 
         private IEnumerator ProcessServerCharacters()
@@ -697,52 +696,82 @@ namespace StayInTarkov.Coop
             if (spawnObject.Profile == null)
             {
                 Logger.LogError("CreatePhysicalOtherPlayerOrBot Profile is NULL!");
+                queuedProfileIds.Remove(spawnObject.Profile.ProfileId);
                 return;
             }
 
-            PlayersToSpawn.TryAdd(spawnObject.Profile.ProfileId, ESpawnState.None);
-            if (PlayersToSpawn[spawnObject.Profile.ProfileId] == ESpawnState.None)
+            //PlayersToSpawn.TryAdd(spawnObject.Profile.ProfileId, ESpawnState.None);
+            //if (PlayersToSpawn[spawnObject.Profile.ProfileId] == ESpawnState.None)
+            //{
+            //    PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Loading;
+            //    IEnumerable<ResourceKey> allPrefabPaths = spawnObject.Profile.GetAllPrefabPaths();
+            //    if (allPrefabPaths.Count() == 0)
+            //    {
+            //        Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::PrefabPaths are empty!");
+            //        PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Error;
+            //        return;
+            //    }
+
+            //    await Singleton<PoolManager>.Instance.LoadBundlesAndCreatePools(PoolManager.PoolsCategory.Raid, PoolManager.AssemblyType.Local, allPrefabPaths.ToArray(), JobPriority.General)
+            //        .ContinueWith(x =>
+            //        {
+            //            if (x.IsCompleted)
+            //            {
+            //                PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Spawning;
+            //                Logger.LogDebug($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Complete.");
+            //            }
+            //            else if (x.IsFaulted)
+            //            {
+            //                Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Failed.");
+            //            }
+            //            else if (x.IsCanceled)
+            //            {
+            //                Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Cancelled?");
+            //            }
+            //        });
+            //}
+
+            IEnumerable<ResourceKey> allPrefabPaths = spawnObject.Profile.GetAllPrefabPaths();
+            if (allPrefabPaths.Count() == 0)
             {
-                PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Loading;
-                IEnumerable<ResourceKey> allPrefabPaths = spawnObject.Profile.GetAllPrefabPaths();
-                if (allPrefabPaths.Count() == 0)
+                Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::PrefabPaths are empty!");
+                PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Error;
+                return;
+            }
+
+            await Singleton<PoolManager>.Instance.LoadBundlesAndCreatePools(PoolManager.PoolsCategory.Raid,
+                PoolManager.AssemblyType.Local,
+                allPrefabPaths.ToArray(),
+                JobPriority.General).ContinueWith(x =>
+            {
+                if (x.IsCompleted)
                 {
-                    Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::PrefabPaths are empty!");
-                    PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Error;
-                    return;
+                    PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Spawning;
+                    Logger.LogDebug($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Complete.");
                 }
+                else if (x.IsFaulted)
+                {
+                    Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Failed.");
+                }
+                else if (x.IsCanceled)
+                {
+                    Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Cancelled?");
+                }
+            });
 
-                await Singleton<PoolManager>.Instance.LoadBundlesAndCreatePools(PoolManager.PoolsCategory.Raid, PoolManager.AssemblyType.Local, allPrefabPaths.ToArray(), JobPriority.General)
-                    .ContinueWith(x =>
-                    {
-                        if (x.IsCompleted)
-                        {
-                            PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Spawning;
-                            Logger.LogDebug($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Complete.");
-                        }
-                        else if (x.IsFaulted)
-                        {
-                            Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Failed.");
-                        }
-                        else if (x.IsCanceled)
-                        {
-                            Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Cancelled?");
-                        }
-                    });
-            }
+            //if (PlayersToSpawn[spawnObject.Profile.ProfileId] == ESpawnState.Spawned)
+            //{
+            //    Logger.LogDebug($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Is already spawned");
+            //    return;
+            //}
 
-            if (PlayersToSpawn[spawnObject.Profile.ProfileId] == ESpawnState.Spawned)
-            {
-                Logger.LogDebug($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Is already spawned");
-                return;
-            }
-
-            PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Spawned;
+            //PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Spawned;
 
             LocalPlayer otherPlayer = CreateLocalPlayer(spawnObject.Profile, spawnObject.Position, playerId);
 
             if (!spawnObject.IsAlive)
             {
+                //Create corpse instead
                 otherPlayer.ActiveHealthController.Kill(EDamageType.Undefined);
             }
 
@@ -760,7 +789,7 @@ namespace StayInTarkov.Coop
                     if (spawnQueue.Count > 0)
                     {
                         Task spawnTask = SpawnPlayer(spawnQueue.Dequeue());
-                        yield return new WaitUntil(() => spawnTask.IsCompleted);                        
+                        //yield return new WaitUntil(() => spawnTask.IsCompleted);                        
                     }
                     else
                     {
@@ -987,7 +1016,6 @@ namespace StayInTarkov.Coop
                 null,
                 false,
                 true).Result;
-
 
             if (otherPlayer == null)
                 return null;

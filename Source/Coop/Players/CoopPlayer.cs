@@ -25,6 +25,7 @@ namespace StayInTarkov.Coop.Players
     public class CoopPlayer : LocalPlayer
     {
         ManualLogSource BepInLogger { get; set; }
+        //CONVERT THESE INTO SINGLETONS
         public SITServer Server { get; set; }
         public SITClient Client { get; set; }
         public NetDataWriter Writer { get; set; }
@@ -1216,10 +1217,10 @@ namespace StayInTarkov.Coop.Players
                 }
 
             }
-            else
-            {
-                EFT.UI.ConsoleScreen.LogError("HandsController was not of type FirearmController when processing FirearmPacket!");
-            }
+            //else
+            //{
+            //    EFT.UI.ConsoleScreen.LogError("HandsController was not of type FirearmController when processing FirearmPacket!");
+            //}
 
             if (packet.Gesture != EGesture.None)
                 vmethod_3(packet.Gesture);
@@ -1351,21 +1352,18 @@ namespace StayInTarkov.Coop.Players
 
             if (packet.HasObservedDeathPacket)
             {
-                EFT.UI.ConsoleScreen.Log("deathpacket");
                 if (HandsController is FirearmController firearmController)
                 {
                     firearmController.SetTriggerPressed(false);
                 }
-                if (packet.ObservedDeathPacket.ProfileId != "null")
-                {
-                    EFT.UI.ConsoleScreen.Log("death profileid nt null");
-                    var player = Singleton<GameWorld>.Instance.GetAlivePlayerByProfileID(packet.ObservedDeathPacket.ProfileId);
-                    if (player != null)
-                    {
-                        EFT.UI.ConsoleScreen.Log("death player was not null");
-                        LastAggressor = player;
-                    }
-                }
+                //if (packet.ObservedDeathPacket.ProfileId != "null")
+                //{
+                //    var player = Singleton<GameWorld>.Instance.GetAlivePlayerByProfileID(packet.ObservedDeathPacket.ProfileId);
+                //    if (player != null)
+                //    {
+                //        LastAggressor = player;
+                //    }
+                //}
                 HasDied = true;
                 ActiveHealthController.Kill(packet.ObservedDeathPacket.DamageType);             
             }

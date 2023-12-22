@@ -136,7 +136,7 @@ namespace StayInTarkov.Networking
                     Position = MyPlayer.Transform.position
                 };
                 _dataWriter.Reset();
-                SendData(_dataWriter, ref requestPacket, DeliveryMethod.ReliableOrdered);
+                SendData(_dataWriter, ref requestPacket, DeliveryMethod.ReliableUnordered);
             }
         }
 
