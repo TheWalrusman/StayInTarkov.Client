@@ -121,15 +121,19 @@ namespace StayInTarkov.Coop.Players
 
         public override void ApplyDamageInfo(DamageInfo damageInfo, EBodyPart bodyPartType, float absorbed, EHeadSegment? headSegment = null)
         {
-            HealthPacket.HasDamageInfo = true;
-            HealthPacket.ApplyDamageInfo = new()
+            if (ActiveHealthController.DamageCoeff > 0)
             {
-                Damage = damageInfo.Damage,
-                DamageType = damageInfo.DamageType,
-                BodyPartType = bodyPartType,
-                Absorbed = absorbed
-            };
-            HealthPacket.ToggleSend();
+                HealthPacket.HasDamageInfo = true;
+                HealthPacket.ApplyDamageInfo = new()
+                {
+                    Damage = damageInfo.Damage,
+                    DamageType = damageInfo.DamageType,
+                    BodyPartType = bodyPartType,
+                    Absorbed = absorbed,
+                    //ProfileId = damageInfo.Player == null ? "null" : damageInfo.Player.iPlayer.ProfileId
+                };
+                HealthPacket.ToggleSend(); 
+            }
 
             base.ApplyDamageInfo(damageInfo, bodyPartType, absorbed, headSegment);
         }
@@ -1356,7 +1360,7 @@ namespace StayInTarkov.Coop.Players
                 {
                     firearmController.SetTriggerPressed(false);
                 }
-                ActiveHealthController.Kill(packet.ObservedDeathPacket.DamageType);                
+                ActiveHealthController.Kill(packet.ObservedDeathPacket.DamageType);             
             }
         }
 

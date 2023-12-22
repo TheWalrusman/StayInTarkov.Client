@@ -4,6 +4,7 @@ using EFT.Interactive;
 using EFT.InventoryLogic;
 using EFT.UI;
 using EFT.Weather;
+using HarmonyLib;
 using StayInTarkov.Configuration;
 using StayInTarkov.Coop.Components;
 using StayInTarkov.Coop.Matchmaker;
@@ -23,7 +24,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
-
+using static StayInTarkov.Coop.CoopGameComponent;
 using Rect = UnityEngine.Rect;
 
 namespace StayInTarkov.Coop
@@ -39,7 +40,6 @@ namespace StayInTarkov.Coop
         public SITConfig SITConfig { get; private set; } = new SITConfig();
         public string ServerId { get; set; } = null;
         public long Timestamp { get; set; } = 0;
-
         public EFT.Player OwnPlayer { get; set; }
 
         /// <summary>
@@ -97,6 +97,15 @@ namespace StayInTarkov.Coop
         public BlockingCollection<Dictionary<string, object>> ActionPackets => ActionPacketHandler.ActionPackets;
 
         private Dictionary<string, object>[] m_CharactersJson { get; set; }
+        private List<string> queuedProfileIds = [];
+        private Queue<SpawnObject> spawnQueue = new(50);
+
+        public class SpawnObject(Profile profile, Vector3 position, bool isAlive)
+        {
+            public Profile Profile { get; set; } = profile;
+            public Vector3 Position { get; set; } = position;
+            public bool IsAlive { get; set; } = isAlive;
+        }
 
         public bool RunAsyncTasks { get; set; } = true;
 
@@ -213,11 +222,10 @@ namespace StayInTarkov.Coop
                 _ = Task.Run(() => ReadFromServerCharactersLoop());
             }
 
-            // Process the Characters retrieved from the previous loop
-            StartCoroutine(ProcessServerCharacters());
-
             // Run any methods you wish every second
             StartCoroutine(EverySecondCoroutine());
+
+            StartCoroutine(ProcessSpawnQueue());
 
             // Start the SIT Garbage Collector
             _ = Task.Run(() => PeriodicEnableDisableGC());
@@ -564,7 +572,7 @@ namespace StayInTarkov.Coop
             if (SpawnedPlayersToFinalize == null)
                 return;
 
-            List<EFT.LocalPlayer> SpawnedPlayersToRemoveFromFinalizer = new();
+            List<LocalPlayer> SpawnedPlayersToRemoveFromFinalizer = [];
             foreach (var p in SpawnedPlayersToFinalize)
             {
                 SetWeaponInHandsOfNewPlayer(p, () =>
@@ -677,6 +685,95 @@ namespace StayInTarkov.Coop
             }
         }
 
+        private async Task SpawnPlayer(SpawnObject spawnObject)
+        {
+            if (Singleton<GameWorld>.Instance.RegisteredPlayers.Any(x => x.ProfileId == spawnObject.Profile.ProfileId))
+                return;
+
+            if (Singleton<GameWorld>.Instance.AllAlivePlayersList.Any(x => x.ProfileId == spawnObject.Profile.ProfileId))
+                return;
+
+            int playerId = Players.Count + Singleton<GameWorld>.Instance.RegisteredPlayers.Count + 1;
+            if (spawnObject.Profile == null)
+            {
+                Logger.LogError("CreatePhysicalOtherPlayerOrBot Profile is NULL!");
+                return;
+            }
+
+            PlayersToSpawn.TryAdd(spawnObject.Profile.ProfileId, ESpawnState.None);
+            if (PlayersToSpawn[spawnObject.Profile.ProfileId] == ESpawnState.None)
+            {
+                PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Loading;
+                IEnumerable<ResourceKey> allPrefabPaths = spawnObject.Profile.GetAllPrefabPaths();
+                if (allPrefabPaths.Count() == 0)
+                {
+                    Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::PrefabPaths are empty!");
+                    PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Error;
+                    return;
+                }
+
+                await Singleton<PoolManager>.Instance.LoadBundlesAndCreatePools(PoolManager.PoolsCategory.Raid, PoolManager.AssemblyType.Local, allPrefabPaths.ToArray(), JobPriority.General)
+                    .ContinueWith(x =>
+                    {
+                        if (x.IsCompleted)
+                        {
+                            PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Spawning;
+                            Logger.LogDebug($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Complete.");
+                        }
+                        else if (x.IsFaulted)
+                        {
+                            Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Failed.");
+                        }
+                        else if (x.IsCanceled)
+                        {
+                            Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Cancelled?");
+                        }
+                    });
+            }
+
+            if (PlayersToSpawn[spawnObject.Profile.ProfileId] == ESpawnState.Spawned)
+            {
+                Logger.LogDebug($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Is already spawned");
+                return;
+            }
+
+            PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Spawned;
+
+            LocalPlayer otherPlayer = CreateLocalPlayer(spawnObject.Profile, spawnObject.Position, playerId);
+
+            if (!spawnObject.IsAlive)
+            {
+                otherPlayer.ActiveHealthController.Kill(EDamageType.Undefined);
+            }
+
+            queuedProfileIds.Remove(spawnObject.Profile.ProfileId);
+        }
+
+        private IEnumerator ProcessSpawnQueue()
+        {
+            while (true)
+            {
+                yield return new WaitForSeconds(0.5f);
+
+                if (Singleton<AbstractGame>.Instantiated && (Singleton<AbstractGame>.Instance.Status == GameStatus.Starting || Singleton<AbstractGame>.Instance.Status == GameStatus.Started))
+                {
+                    if (spawnQueue.Count > 0)
+                    {
+                        Task spawnTask = SpawnPlayer(spawnQueue.Dequeue());
+                        yield return new WaitUntil(() => spawnTask.IsCompleted);                        
+                    }
+                    else
+                    {
+                        yield return new WaitForSeconds(5);
+                    }
+                }
+                else
+                {
+                    yield return new WaitForSeconds(5);
+                }                
+            }
+        }
+
         private void ProcessPlayerBotSpawn2(string profileId, Vector3 newPosition, bool isBot, Profile profile, bool isAlive = true)
         {
             // If not showing drones. Check whether the "Player" has been registered, if they have, then ignore the drone
@@ -730,16 +827,20 @@ namespace StayInTarkov.Coop
             }
         }
 
-        public void TestCreateObserved(Profile profile, Vector3 position, bool isAlive = true)
+        public void QueueProfile(Profile profile, Vector3 position, bool isAlive = true)
         {
+            if (Singleton<GameWorld>.Instance.RegisteredPlayers.Any(x => x.ProfileId == profile.ProfileId))
+                return;
 
-            if (Singleton<AbstractGame>.Instantiated && (Singleton<AbstractGame>.Instance.Status == GameStatus.Starting || Singleton<AbstractGame>.Instance.Status == GameStatus.Started))
-            {
-                bool isAi = true;
-                if (profile.ProfileId.StartsWith("pmc"))
-                    isAi = false;
-                ProcessPlayerBotSpawn2(profile.ProfileId, position, isAi, profile, isAlive); 
-            }
+            if (Singleton<GameWorld>.Instance.AllAlivePlayersList.Any(x => x.ProfileId == profile.ProfileId))
+                return;
+
+            if (queuedProfileIds.Contains(profile.ProfileId))
+                return;
+
+            queuedProfileIds.Add(profile.ProfileId);
+            ConsoleScreen.Log("Queueing profile.");
+            spawnQueue.Enqueue(new SpawnObject(profile, position, isAlive));
         }
 
         private void CreatePhysicalOtherPlayerOrBot(Profile profile, Vector3 position, bool isDead = false)

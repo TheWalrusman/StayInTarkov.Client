@@ -112,7 +112,7 @@ namespace StayInTarkov.Coop.Players
             // TODO: Do this on ApplyShot instead, and check if instigator is local
             // Also do check if it's a server and shooter is AI
 
-            if (damageInfo.Player == null || damageInfo.Player is not CoopPlayer)
+            if (damageInfo.Player == null || !damageInfo.Player.iPlayer.IsYourPlayer)
                 return;
 
             if (!IsObservedAI)
@@ -124,7 +124,8 @@ namespace StayInTarkov.Coop.Players
                 Damage = damageInfo.Damage,
                 DamageType = damageInfo.DamageType,
                 BodyPartType = bodyPartType,
-                Absorbed = absorbed
+                Absorbed = absorbed,
+                //ProfileId = damageInfo.Player == null ? "null" : damageInfo.Player.iPlayer.ProfileId
             };
             HealthPacket.ToggleSend();
 
