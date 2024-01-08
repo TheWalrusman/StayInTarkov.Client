@@ -74,13 +74,23 @@ namespace StayInTarkov.Networking
                 AutoRecycle = true,
                 IPv6Enabled = false,
                 EnableStatistics = true,
-                NatPunchEnabled = true
+                NatPunchEnabled = false
             };
 
+            /*
             _netServer.Start(
                 PluginConfigSettings.Instance.CoopSettings.SITUDPHostIPV4
                 , PluginConfigSettings.Instance.CoopSettings.SITUDPHostIPV6
                 , PluginConfigSettings.Instance.CoopSettings.SITUDPPort);
+            */
+
+            var p2pConnectionHelper = new P2PConnectionHelper(_netServer);
+            
+            p2pConnectionHelper.Connect();
+            p2pConnectionHelper.GenerateAndSendEndpoints();
+
+            // The server should always bind on 0.0.0.0 to be able to listen on all adapters
+            _netServer.Start(PluginConfigSettings.Instance.CoopSettings.SITUDPPort);
 
             Logger.LogDebug($"Server started on port {_netServer.LocalPort}.");
             EFT.UI.ConsoleScreen.Log($"Server started on port {_netServer.LocalPort}.");

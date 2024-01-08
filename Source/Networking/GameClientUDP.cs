@@ -14,6 +14,8 @@ using System.Collections.Concurrent;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
 using static StayInTarkov.Networking.SITSerialization;
 
@@ -34,6 +36,9 @@ namespace StayInTarkov.Networking
         public NetPacketProcessor _packetProcessor = new();
         public int Ping = 0;
         public int ConnectedClients = 0;
+        public bool IsConnected = false;
+
+        private NatTraversalMethod CurrentNatTraversalMethod = NatTraversalMethod.NatPunch;
 
         private ManualLogSource Logger { get; set; }
 
@@ -69,8 +74,43 @@ namespace StayInTarkov.Networking
                 IPv6Enabled = false
             };
 
-            _netClient.Start();
-            _netClient.Connect("78.105.157.146", PluginConfigSettings.Instance.CoopSettings.SITUDPPort, "sit.core");
+            Connect(NatTraversalMethod.NatPunch);
+        }
+
+        private async void Connect(NatTraversalMethod natTraversalType)
+        {
+            CurrentNatTraversalMethod = natTraversalType;
+
+            var p2pConnectionHelper = new P2PConnectionHelper(_netClient);
+            p2pConnectionHelper.Connect();
+
+            if (natTraversalType == NatTraversalMethod.NatPunch)
+            {
+                Logger.LogInfo("Connecting using nat punch....");
+
+                var endPoint = await p2pConnectionHelper.PunchNATRequest();
+
+                Logger.LogInfo($"nat punch completed: {endPoint.Address.ToString()}:{endPoint.Port}");
+
+                _netClient.Start(PluginConfigSettings.Instance.CoopSettings.SITUDPPort);
+
+                // we need to bind on the same local port as the STUN query. it doesn't have to be the SITUDPPort, but this works for now.
+                _netClient.Connect(endPoint.Address.ToString(), endPoint.Port, "sit.core");
+            }
+
+            if(natTraversalType == NatTraversalMethod.Upnp)
+            {
+                Logger.LogInfo("Connecting using upnp....");
+                _netClient.Start();
+                _netClient.Connect("12.12.12.12", 1234, "sit.core");
+            }
+
+            if(natTraversalType == NatTraversalMethod.PortForward)
+            {
+                Logger.LogInfo("Connecting using port forward....");
+                _netClient.Start();
+                _netClient.Connect("12.12.12.12", 1234, "sit.core");
+            }
         }
 
         //private void OnAirdropLootPacketReceived(AirdropLootPacket packet, NetPeer peer)
@@ -340,6 +380,7 @@ namespace StayInTarkov.Networking
             else
             {
                 //_netClient.SendBroadcast([1], PluginConfigSettings.Instance.CoopSettings.SITGamePlayPort);
+                _netClient.SendBroadcast([1], PluginConfigSettings.Instance.CoopSettings.SITUDPPort); 
             }
         }
 
@@ -360,6 +401,8 @@ namespace StayInTarkov.Networking
             EFT.UI.ConsoleScreen.Log("[CLIENT] We connected to " + peer.EndPoint);
             NotificationManagerClass.DisplayMessageNotification($"Connected to server {peer.EndPoint}.",
                 EFT.Communications.ENotificationDurationType.Default, EFT.Communications.ENotificationIconType.Friend);
+
+            IsConnected = true;
         }
 
         public void OnNetworkError(IPEndPoint endPoint, SocketError socketErrorCode)
@@ -394,6 +437,20 @@ namespace StayInTarkov.Networking
         public void OnPeerDisconnected(NetPeer peer, LiteNetLib.DisconnectInfo disconnectInfo)
         {
             EFT.UI.ConsoleScreen.Log("[CLIENT] We disconnected because " + disconnectInfo.Reason);
+
+            // Need a better logic here.
+            if(disconnectInfo.Reason == DisconnectReason.ConnectionFailed && !IsConnected)
+            {
+                if (CurrentNatTraversalMethod == NatTraversalMethod.NatPunch)
+                {
+                    Connect(NatTraversalMethod.Upnp);
+                }
+
+                if (CurrentNatTraversalMethod == NatTraversalMethod.Upnp)
+                {
+                    Connect(NatTraversalMethod.PortForward);
+                }
+            }
         }
     }
 }
