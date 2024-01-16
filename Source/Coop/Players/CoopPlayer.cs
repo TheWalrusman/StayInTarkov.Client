@@ -18,7 +18,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
 using UnityEngine;
 
@@ -355,28 +354,6 @@ namespace StayInTarkov.Coop.Players
             };
             CommonPlayerPacket.ToggleSend();
         }
-
-        //private void ObservedOperateStationaryWeapon(StationaryWeapon stationaryWeapon, SITSerialization.StationaryPacket.EStationaryCommand command)
-        //{
-        //    if (command == SITSerialization.StationaryPacket.EStationaryCommand.Occupy)
-        //    {
-        //        stationaryWeapon.SetOperator(TryGetId, false);
-        //        MovementContext.StationaryWeapon = stationaryWeapon;
-        //        MovementContext.InteractionParameters = stationaryWeapon.GetInteractionParameters();
-        //        MovementContext.PlayerAnimatorSetApproached(false);
-        //        MovementContext.PlayerAnimatorSetStationary(true);
-        //        MovementContext.PlayerAnimatorSetStationaryAnimation((int)stationaryWeapon.Animation);
-        //        return;
-        //    }
-        //    if (command == SITSerialization.StationaryPacket.EStationaryCommand.Denied)
-        //    {
-        //        MovementContext.PlayerAnimatorSetStationary(false);
-        //        if (MovementContext.StationaryWeapon != null)
-        //        {
-        //            MovementContext.StationaryWeapon.Unlock(TryGetId);
-        //        }
-        //    }
-        //}
 
         protected virtual void ReceiveSay(EPhraseTrigger trigger, int index)
         {
@@ -1002,7 +979,8 @@ namespace StayInTarkov.Coop.Players
 
             if (packet.HasItemControllerExecutePacket)
             {
-                var inventory = Singleton<GameWorld>.Instance.FindControllerById(packet.ItemControllerExecutePacket.InventoryId);
+                //var inventory = Singleton<GameWorld>.Instance.FindControllerById(packet.ItemControllerExecutePacket.InventoryId);
+                var inventory = _inventoryController;
                 if (inventory != null)
                 {
                     // Look at method_117 on NetworkPlayer
@@ -1013,8 +991,7 @@ namespace StayInTarkov.Coop.Players
                     using BinaryReader binaryReader = new(memoryStream);
                     try
                     {
-                        var convOp = binaryReader.ReadPolymorph<AbstractDescriptor1>();
-                        var result = ToInventoryOperation(convOp);
+                        var result = ToInventoryOperation(binaryReader.ReadPolymorph<AbstractDescriptor1>());
 
                         ItemController_Execute_Patch.RunLocally = false;
                         inventory.Execute(result.Value, new Callback((r) =>
@@ -1025,14 +1002,14 @@ namespace StayInTarkov.Coop.Players
                                 Debug.Log($"Error during InventoryOperation on ObservedPlayer '{Profile.Nickname}'! ErrorCode: {r.ErrorCode}, Error: {r.Error}, Failed: {r.Failed}");
                             }
                         }));
-                        //result.Value.vmethod_0(new Callback((r) =>
+
+                        //ObservedInventoryController.ObservedInventoryOperationHandler handler = new()
                         //{
-                        //    if (!r.Succeed)
-                        //    {
-                        //        EFT.UI.ConsoleScreen.Log($"Error during InventoryOperation on ObservedPlayer! ErrorCode: {r.ErrorCode}, Error: {r.Error}, Failed: {r.Failed}");
-                        //        Debug.Log($"Error during InventoryOperation on ObservedPlayer '{Profile.Nickname}'! ErrorCode: {r.ErrorCode}, Error: {r.Error}, Failed: {r.Failed}");
-                        //    }
-                        //}));
+                        //    coopPlayer = this,
+                        //    operation = result.Value
+                        //};
+
+                        //handler.operation.vmethod_0(new Callback(handler.OperationCallback), false);
                     }
                     catch (Exception exception)
                     {
@@ -1150,7 +1127,7 @@ namespace StayInTarkov.Coop.Players
                     {
                         BulletClass ammo = (BulletClass)Singleton<ItemFactory>.Instance.CreateItem(MongoID.Generate(), packet.ShotInfoPacket.AmmoTemplate, null);
                         firearmController.InitiateShot(firearmController.Item, ammo, packet.ShotInfoPacket.ShotPosition, packet.ShotInfoPacket.ShotDirection,
-                            packet.ShotInfoPacket.FireportPosition, packet.ShotInfoPacket.ChamberIndex, packet.ShotInfoPacket.Overheat);                        
+                            packet.ShotInfoPacket.FireportPosition, packet.ShotInfoPacket.ChamberIndex, packet.ShotInfoPacket.Overheat);
 
                         float pitchMult = firearmController.method_54();
                         firearmController.WeaponSoundPlayer.FireBullet(ammo, packet.ShotInfoPacket.ShotPosition, packet.ShotInfoPacket.ShotDirection.normalized,
@@ -1162,7 +1139,7 @@ namespace StayInTarkov.Coop.Players
 
                         if (firearmController.Weapon.HasChambers)
                         {
-                            firearmController.Weapon.Chambers[0].RemoveItem(false);  
+                            firearmController.Weapon.Chambers[0].RemoveItem(false);
                             if (firearmController.Weapon.BoltAction)
                             {
                                 firearmController.FirearmsAnimator.SetBoltActionReload(true);
@@ -1176,7 +1153,7 @@ namespace StayInTarkov.Coop.Players
                                 weaponEffectsManager.DestroyPatronInWeapon(packet.ShotInfoPacket.ChamberIndex);
                                 weaponEffectsManager.CreatePatronInShellPort(ammo, packet.ShotInfoPacket.ChamberIndex);
                                 if (firearmController.Weapon is not GWeapon5 || firearmController.Weapon.ReloadMode != Weapon.EReloadMode.OnlyBarrel || !firearmController.Weapon.BoltAction)
-                                    weaponEffectsManager.StartSpawnShell(Velocity, 0);                                
+                                    weaponEffectsManager.StartSpawnShell(Velocity, 0);
 
                                 if (magazine != null && !firearmController.Weapon.BoltAction)
                                 {
@@ -1185,8 +1162,8 @@ namespace StayInTarkov.Coop.Players
                             }
                         }
 
-                        ammo.IsUsed = true;                        
-                        
+                        ammo.IsUsed = true;
+
                         if (magazine != null && !firearmController.Weapon.BoltAction)
                         {
                             magazine.Cartridges.PopTo(_inventoryController, new SlotItemAddress(firearmController.Item.Chambers[0]));
@@ -1196,7 +1173,7 @@ namespace StayInTarkov.Coop.Players
                             firearmController.FirearmsAnimator.SetBoltCatch(true);
                         else if (firearmController.Weapon.IsBoltCatch && !firearmController.Weapon.ManualBoltCatch && firearmController.FirearmsAnimator.GetBoltCatch())
                             firearmController.FirearmsAnimator.SetBoltCatch(false);
-                        
+
                         //firearmController.FirearmsAnimator.SetFire(false);
 
                         //firearmController.FirearmsAnimator.SetBoltActionReload(true);

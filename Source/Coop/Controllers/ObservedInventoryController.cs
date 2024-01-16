@@ -1,5 +1,7 @@
-﻿using EFT;
-using System;
+﻿using Comfort.Common;
+using EFT;
+using StayInTarkov.Coop.Players;
+using UnityEngine;
 
 namespace StayInTarkov.Coop.Controllers
 {
@@ -41,6 +43,21 @@ namespace StayInTarkov.Coop.Controllers
         {
             // TODO: Add networking
             base.StopSearchingAction(item);
+        }
+
+        public class ObservedInventoryOperationHandler()
+        {
+            public void OperationCallback(IResult executeResult)
+            {
+                if (!executeResult.Succeed)
+                {
+                    EFT.UI.ConsoleScreen.LogError($"{coopPlayer.ProfileId}: Operation ID {operation.Id} failed: {operation}\nError: {executeResult.Error}");
+                    Debug.Log($"{coopPlayer.ProfileId}: Operation ID {operation.Id} failed: {operation}\nError: {executeResult.Error}");
+                }
+            }
+
+            public AbstractInventoryOperation operation;
+            public CoopPlayer coopPlayer;
         }
 
     }

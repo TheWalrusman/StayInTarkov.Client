@@ -31,6 +31,12 @@ namespace StayInTarkov.Coop.ItemControllerPatches
         [PatchPostfix]
         public static void Postfix(EFT.Player.PlayerInventoryController __instance, AbstractInventoryOperation operation, [CanBeNull] Callback callback)
         {
+            //if (operation is AmmoManipulationOperation)
+            //{
+            //    EFT.UI.ConsoleScreen.Log("Operation was AMO");
+            //    return;
+            //}
+
             var player = Singleton<GameWorld>.Instance.MainPlayer as CoopPlayer;
             if (player == null || !player.IsYourPlayer && !MatchmakerAcceptPatches.IsServer && !player.IsAI)
                 return;
@@ -46,7 +52,7 @@ namespace StayInTarkov.Coop.ItemControllerPatches
             using MemoryStream memoryStream = new();
             using (BinaryWriter binaryWriter = new(memoryStream))
             {
-                binaryWriter.WritePolymorph(OperationToDescriptorHelpers.FromInventoryOperation(operation, true));
+                binaryWriter.WritePolymorph(OperationToDescriptorHelpers.FromInventoryOperation(operation, false));
                 var opBytes = memoryStream.ToArray();
                 player.InventoryPacket.ItemControllerExecutePacket = new()
                 {

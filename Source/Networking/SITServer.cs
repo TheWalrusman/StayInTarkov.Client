@@ -36,7 +36,7 @@ namespace StayInTarkov.Networking
         public CoopPlayer MyPlayer => Singleton<GameWorld>.Instance.MainPlayer as CoopPlayer;
         public ConcurrentDictionary<string, CoopPlayer> Players => CoopGameComponent.Players;
         public List<string> PlayersMissing = [];
-        public string MyExternalIP { get; private set; }
+        public string MyExternalIP { get; private set; } = NetUtils.GetLocalIp(LocalAddrType.IPv4);
         private int Port => PluginConfigSettings.Instance.CoopSettings.SITGamePlayPort;
         private CoopGameComponent CoopGameComponent { get; set; }
         public LiteNetLib.NetManager NetServer
@@ -97,13 +97,28 @@ namespace StayInTarkov.Networking
                 });
 
                 if (upnpFailed)
-                    Singleton<PreloaderUI>.Instance.ShowErrorScreen("Network Error", "UPnP mapping failed. Make sure the selected port is not already open!"); 
+                    Singleton<PreloaderUI>.Instance.ShowErrorScreen("Network Error", "UPnP mapping failed. Make sure the selected port is not already open!");
+            }
+            else
+            {
+                try
+                {
+                    var discoverer = new NatDiscoverer();
+                    var cts = new CancellationTokenSource(10000);
+                    var device = await discoverer.DiscoverDeviceAsync(PortMapper.Upnp, cts);
+                    var extIp = await device.GetExternalIPAsync();
+                    MyExternalIP = extIp.MapToIPv4().ToString();
+                }
+                catch (System.Exception ex)
+                {
+                    Singleton<PreloaderUI>.Instance.ShowErrorScreen("Network Error", "Error when trying to receive IP automatically. Make sure you are behind a NAT!");
+                }
             }
 
             _netServer.Start(Port);
 
             ConsoleScreen.Log("Started SITServer");
-            NotificationManagerClass.DisplayMessageNotification($"Server started on port {_netServer.LocalPort}.",
+            NotificationManagerClass.DisplayMessageNotification($"Server started on address {MyExternalIP}, port {_netServer.LocalPort}.",
                 EFT.Communications.ENotificationDurationType.Default, EFT.Communications.ENotificationIconType.EntryPoint);
 
             Dictionary<string, object> packet = new()
