@@ -1,12 +1,8 @@
 ﻿using EFT.HealthSystem;
-using StayInTarkov.Coop.Matchmaker;
-using StayInTarkov.Coop.NetworkPacket;
 using StayInTarkov.Coop.Players;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using UnityEngine;
-using static AHealthController<EFT.HealthSystem.ActiveHealthController.AbstractEffect>;
 
 namespace StayInTarkov.Coop.Player.Health
 {
@@ -58,7 +54,7 @@ namespace StayInTarkov.Coop.Player.Health
 
         public override void Replicated(EFT.Player player, Dictionary<string, object> dict)
         {
-            
-        }        
+
+        }
     }
 }

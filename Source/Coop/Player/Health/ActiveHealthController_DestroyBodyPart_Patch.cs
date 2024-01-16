@@ -1,4 +1,5 @@
-﻿using EFT.HealthSystem;
+﻿using EFT;
+using EFT.HealthSystem;
 using StayInTarkov.Coop.Players;
 using System;
 using System.Collections.Generic;
@@ -6,11 +7,11 @@ using System.Reflection;
 
 namespace StayInTarkov.Coop.Player.Health
 {
-    internal class RestoreBodyPartPatch : ModuleReplicationPatch
+    internal class ActiveHealthController_DestroyBodyPart_Patch : ModuleReplicationPatch
     {
         public override Type InstanceType => typeof(PlayerHealthController);
 
-        public override string MethodName => "RestoreBodyPart";
+        public override string MethodName => "DestroyBodyPart";
 
         protected override MethodBase GetTargetMethod()
         {
@@ -18,16 +19,16 @@ namespace StayInTarkov.Coop.Player.Health
         }
 
         [PatchPostfix]
-        public static void PatchPostfix(PlayerHealthController __instance, EBodyPart bodyPart, float healthPenalty)
+        public static void PatchPostfix(PlayerHealthController __instance, EBodyPart bodyPart, EDamageType damageType)
         {
             var botPlayer = __instance.Player as CoopBot;
             if (botPlayer != null)
             {
-                botPlayer.HealthPacket.HasBodyPartRestoreInfo = true;
-                botPlayer.HealthPacket.RestoreBodyPartPacket = new()
+                botPlayer.HealthPacket.HasBodyPartDestroyInfo = true;
+                botPlayer.HealthPacket.DestroyBodyPartPacket = new()
                 {
                     BodyPartType = bodyPart,
-                    HealthPenalty = healthPenalty
+                    DamageType = damageType
                 };
                 botPlayer.HealthPacket.ToggleSend();
                 return;
@@ -37,11 +38,11 @@ namespace StayInTarkov.Coop.Player.Health
             if (player == null || !player.IsYourPlayer)
                 return;
 
-            player.HealthPacket.HasBodyPartRestoreInfo = true;
-            player.HealthPacket.RestoreBodyPartPacket = new()
+            player.HealthPacket.HasBodyPartDestroyInfo = true;
+            player.HealthPacket.DestroyBodyPartPacket = new()
             {
                 BodyPartType = bodyPart,
-                HealthPenalty = healthPenalty
+                DamageType = damageType
             };
             player.HealthPacket.ToggleSend();
         }

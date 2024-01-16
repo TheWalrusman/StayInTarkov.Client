@@ -1,5 +1,6 @@
 ﻿using Aki.Custom.Airdrops;
 using Comfort.Common;
+using EFT.UI;
 using LiteNetLib;
 using LiteNetLib.Utils;
 using StayInTarkov.Configuration;
@@ -9,6 +10,7 @@ using StayInTarkov.Coop.Players;
 using StayInTarkov.Networking.Packets;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -32,6 +34,13 @@ namespace StayInTarkov.Networking
         public NetPacketProcessor _packetProcessor = new();
         public int Ping = 0;
         public int ConnectedClients = 0;
+        public LiteNetLib.NetManager NetClient
+        {
+            get
+            {
+                return _netClient;
+            }
+        }
 
         public void Start()
         {
@@ -61,7 +70,19 @@ namespace StayInTarkov.Networking
 
             _netClient.Start();
 
-            _netClient.Connect(PluginConfigSettings.Instance.CoopSettings.SITGamePlayIP, PluginConfigSettings.Instance.CoopSettings.SITGamePlayPort, "sit.core");
+            string json = AkiBackendCommunication.Instance.GetJson($"/coop/server/connectionInfo/{CoopGameComponent.GetServerId()}");
+            Dictionary<string, string>  retrievedPacket = json.ParseJsonTo<Dictionary<string, string>>();
+            string ip = retrievedPacket["ip"].ToString();
+            bool portFound = int.TryParse(retrievedPacket["port"].ToString(), out int port);
+
+            if (string.IsNullOrEmpty(ip) && !portFound)
+            {
+                Singleton<PreloaderUI>.Instance.ShowErrorScreen("Network Error", "Unable to connect to the server. IP and/or Port was empty when requesting data!");
+            }
+            else
+            {
+                _netClient.Connect(ip, port, "sit.core");
+            };
         }
 
         private void OnAirdropLootPacketReceived(AirdropLootPacket packet, NetPeer peer)
@@ -166,7 +187,6 @@ namespace StayInTarkov.Networking
 
         private void OnHealthPacketReceived(HealthPacket packet, NetPeer peer)
         {
-            EFT.UI.ConsoleScreen.Log($"{packet.ProfileId}");
             if (!Players.ContainsKey(packet.ProfileId))
                 return;
 
@@ -321,6 +341,7 @@ namespace StayInTarkov.Networking
         public void Awake()
         {
             CoopGameComponent = CoopPatches.CoopGameComponentParent.GetComponent<CoopGameComponent>();
+            Singleton<SITClient>.Create(this);
         }
 
         void Update()
@@ -353,8 +374,7 @@ namespace StayInTarkov.Networking
 
         public void OnPeerConnected(NetPeer peer)
         {
-            EFT.UI.ConsoleScreen.Log("[CLIENT] We connected to " + peer.EndPoint);
-            NotificationManagerClass.DisplayMessageNotification($"Connected to server {peer.EndPoint}.",
+            NotificationManagerClass.DisplayMessageNotification($"Connected to server on port {peer.EndPoint.Port}.",
                 EFT.Communications.ENotificationDurationType.Default, EFT.Communications.ENotificationIconType.Friend);
         }
 

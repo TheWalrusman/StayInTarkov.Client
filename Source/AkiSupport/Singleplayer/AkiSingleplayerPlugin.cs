@@ -57,6 +57,7 @@ namespace StayInTarkov.AkiSupport.Singleplayer
                 //new InsuredItemManagerStartPatch().Enable();
                 //new MapReadyButtonPatch().Enable();
                 new LabsKeycardRemovalPatch().Enable();
+                new TinnitusFixPatch().Enable();
             }
             catch (Exception ex)
             {

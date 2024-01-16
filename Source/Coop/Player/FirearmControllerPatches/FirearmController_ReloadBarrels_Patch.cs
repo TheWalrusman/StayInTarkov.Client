@@ -41,8 +41,6 @@ namespace StayInTarkov.Coop.Player.FirearmControllerPatches
                         locationDescription = new byte[0];
                     }
 
-                    EFT.UI.ConsoleScreen.Log("Firing away ReloadMag packet!");
-
                     botPlayer.WeaponPacket.HasReloadBarrelsPacket = true;
                     botPlayer.WeaponPacket.ReloadBarrels = new()
                     {
@@ -78,8 +76,6 @@ namespace StayInTarkov.Coop.Player.FirearmControllerPatches
                 {
                     locationDescription = new byte[0];
                 }
-
-                EFT.UI.ConsoleScreen.Log("Firing away ReloadMag packet!");
 
                 player.WeaponPacket.HasReloadBarrelsPacket = true;
                 player.WeaponPacket.ReloadBarrels = new()

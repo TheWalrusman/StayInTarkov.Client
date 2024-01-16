@@ -718,15 +718,38 @@ namespace StayInTarkov.Networking
 
             public static RestoreBodyPartPacket Deserialize(NetDataReader reader)
             {
-                RestoreBodyPartPacket packet = new();
-                packet.BodyPartType = (EBodyPart)reader.GetInt();
-                packet.HealthPenalty = reader.GetFloat();
+                RestoreBodyPartPacket packet = new()
+                {
+                    BodyPartType = (EBodyPart)reader.GetInt(),
+                    HealthPenalty = reader.GetFloat()
+                };
                 return packet;
             }
             public static void Serialize(NetDataWriter writer, RestoreBodyPartPacket packet)
             {
                 writer.Put((int)packet.BodyPartType);
                 writer.Put(packet.HealthPenalty);
+            }
+        }
+
+        public struct DestroyBodyPartPacket
+        {
+            public EBodyPart BodyPartType { get; set; }
+            public EDamageType DamageType { get; set; }
+
+            public static DestroyBodyPartPacket Deserialize(NetDataReader reader)
+            {
+                DestroyBodyPartPacket packet = new()
+                {
+                    BodyPartType = (EBodyPart)reader.GetInt(),
+                    DamageType = (EDamageType)reader.GetInt()
+                };
+                return packet;
+            }
+            public static void Serialize(NetDataWriter writer, DestroyBodyPartPacket packet)
+            {
+                writer.Put((int)packet.BodyPartType);
+                writer.Put((int)packet.DamageType);
             }
         }
 
@@ -1063,6 +1086,84 @@ namespace StayInTarkov.Networking
                 writer.Put(packet.ItemId);
                 if (packet.HasItemId)
                     writer.Put(packet.ItemId);
+            }
+        }
+
+        public struct StationaryPacket
+        {
+            public EStationaryCommand Command { get; set; }
+            public string Id { get; set; }
+            public enum EStationaryCommand : byte
+            {
+                Occupy,
+                Leave,
+                Denied
+            }
+
+            public static StationaryPacket Deserialize(NetDataReader reader)
+            {
+                StationaryPacket packet = new()
+                {
+                    Command = (EStationaryCommand)reader.GetByte()
+                };
+
+                if (packet.Command == EStationaryCommand.Occupy)
+                    packet.Id = reader.GetString();
+
+                return packet;
+            }
+            public static void Serialize(NetDataWriter writer, StationaryPacket packet)
+            {
+                writer.Put((byte)packet.Command);
+                if (packet.Command == EStationaryCommand.Occupy && !string.IsNullOrEmpty(packet.Id))
+                    writer.Put(packet.Id);
+            }
+        }
+
+        public struct ShotInfoPacket()
+        {
+
+            public bool IsPrimaryActive { get; set; } = true;
+            public EShotType ShotType { get; set; } = EShotType.Unknown;
+            public int AmmoAfterShot { get; set; } = 0;
+            public Vector3 ShotPosition { get; set; } = Vector3.zero;
+            public Vector3 ShotDirection { get; set; } = Vector3.zero;
+            public Vector3 FireportPosition { get; set; } = Vector3.zero;
+            public int ChamberIndex { get; set; } = 0;
+            public float Overheat { get; set; } = 0f;
+            public bool UnderbarrelShot { get; set; } = false;
+            public string AmmoTemplate { get; set; } = "null";
+
+            public static ShotInfoPacket Deserialize(NetDataReader reader)
+            {
+                ShotInfoPacket packet = new()
+                {
+                    IsPrimaryActive = reader.GetBool(),
+                    ShotType = (EShotType)reader.GetInt(),
+                    AmmoAfterShot = reader.GetInt(),
+                    ShotPosition = Vector3Utils.Deserialize(reader),
+                    ShotDirection = Vector3Utils.Deserialize(reader),
+                    FireportPosition = Vector3Utils.Deserialize(reader),
+                    ChamberIndex = reader.GetInt(),
+                    Overheat = reader.GetFloat(),
+                    UnderbarrelShot = reader.GetBool(),
+                    AmmoTemplate = reader.GetString()
+                };
+
+                return packet;
+            }
+            public static void Serialize(NetDataWriter writer, ShotInfoPacket packet)
+            {
+                writer.Put(packet.IsPrimaryActive);
+                writer.Put((int)packet.ShotType);
+                writer.Put(packet.AmmoAfterShot);
+                Vector3Utils.Serialize(writer, packet.ShotPosition);
+                Vector3Utils.Serialize(writer, packet.ShotDirection);
+                Vector3Utils.Serialize(writer, packet.FireportPosition);
+                writer.Put(packet.ChamberIndex);
+                writer.Put(packet.Overheat);
+                writer.Put(packet.UnderbarrelShot);
+                writer.Put(packet.AmmoTemplate);
             }
         }
 

@@ -9,7 +9,11 @@ namespace StayInTarkov.Coop
         public CoopHealthController(Profile.ProfileHealth healthInfo, EFT.Player player, InventoryController inventoryController, SkillManager skillManager, bool aiHealth)
             : base(healthInfo, player, inventoryController, skillManager, aiHealth)
         {
-
+            //float_8 = 0f;
+            //float_9 = 0f;
+            EnergyRate = 0f;
+            HydrationRate = 0f;
+            TemperatureRate = 0f;
         }
 
         public void AddNetworkEffect(string type, EBodyPart bodyPart, float? delayTime = null, float? workTime = null, float? residueTime = null, float? strength = null)
@@ -109,9 +113,9 @@ namespace StayInTarkov.Coop
                 case "Wound":
                     AddEffect<Wound>(bodyPart, delayTime, workTime, residueTime, strength);
                     break;
-                case "MedEffect":
-                    AddEffect<MedEffect>(bodyPart, delayTime, workTime, residueTime, strength);
-                    break;
+                //case "MedEffect":
+                //    AddEffect<MedEffect>(bodyPart, delayTime, workTime, residueTime, strength);
+                //    break;
             }
         }
     }

@@ -3,8 +3,6 @@ using EFT;
 using EFT.Interactive;
 using EFT.InventoryLogic;
 using EFT.UI;
-using EFT.Weather;
-using HarmonyLib;
 using StayInTarkov.Configuration;
 using StayInTarkov.Coop.Components;
 using StayInTarkov.Coop.Matchmaker;
@@ -24,7 +22,6 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
-using static StayInTarkov.Coop.CoopGameComponent;
 using Rect = UnityEngine.Rect;
 
 namespace StayInTarkov.Coop
@@ -700,37 +697,6 @@ namespace StayInTarkov.Coop
                 return;
             }
 
-            //PlayersToSpawn.TryAdd(spawnObject.Profile.ProfileId, ESpawnState.None);
-            //if (PlayersToSpawn[spawnObject.Profile.ProfileId] == ESpawnState.None)
-            //{
-            //    PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Loading;
-            //    IEnumerable<ResourceKey> allPrefabPaths = spawnObject.Profile.GetAllPrefabPaths();
-            //    if (allPrefabPaths.Count() == 0)
-            //    {
-            //        Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::PrefabPaths are empty!");
-            //        PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Error;
-            //        return;
-            //    }
-
-            //    await Singleton<PoolManager>.Instance.LoadBundlesAndCreatePools(PoolManager.PoolsCategory.Raid, PoolManager.AssemblyType.Local, allPrefabPaths.ToArray(), JobPriority.General)
-            //        .ContinueWith(x =>
-            //        {
-            //            if (x.IsCompleted)
-            //            {
-            //                PlayersToSpawn[spawnObject.Profile.ProfileId] = ESpawnState.Spawning;
-            //                Logger.LogDebug($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Complete.");
-            //            }
-            //            else if (x.IsFaulted)
-            //            {
-            //                Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Failed.");
-            //            }
-            //            else if (x.IsCanceled)
-            //            {
-            //                Logger.LogError($"CreatePhysicalOtherPlayerOrBot::{spawnObject.Profile.Info.Nickname}::Load Cancelled?");
-            //            }
-            //        });
-            //}
-
             IEnumerable<ResourceKey> allPrefabPaths = spawnObject.Profile.GetAllPrefabPaths();
             if (allPrefabPaths.Count() == 0)
             {
@@ -773,6 +739,7 @@ namespace StayInTarkov.Coop
             {
                 //Create corpse instead?
                 otherPlayer.ActiveHealthController.Kill(EDamageType.Undefined);
+                otherPlayer.OnDead(EDamageType.Undefined);
             }
 
             queuedProfileIds.Remove(spawnObject.Profile.ProfileId);
@@ -799,7 +766,7 @@ namespace StayInTarkov.Coop
                 else
                 {
                     yield return new WaitForSeconds(2);
-                }                
+                }
             }
         }
 
@@ -1228,7 +1195,7 @@ namespace StayInTarkov.Coop
                 GUI.contentColor = MyPlayer.Client.Ping >= AkiBackendCommunication.PING_LIMIT_HIGH ? Color.red : ServerPing >= AkiBackendCommunication.PING_LIMIT_MID ? Color.yellow : Color.green;
                 GUI.Label(rect, $"Ping: {MyPlayer.Client.Ping}");
                 rect.y += 15;
-                GUI.contentColor = Color.white; 
+                GUI.contentColor = Color.white;
             }
 
 

@@ -98,7 +98,8 @@ namespace StayInTarkov.Coop.Player.InteractionPatches
                     {
                         IsStart = true,
                         InteractiveId = interactive.Id,
-                        InteractionType = interactionResult.InteractionType
+                        InteractionType = interactionResult.InteractionType,
+                        HasKey = false
                     };
                 }
                 EFT.UI.ConsoleScreen.Log($"Sending WorldInteractionPacket on {interactive.Id}");
@@ -156,7 +157,8 @@ namespace StayInTarkov.Coop.Player.InteractionPatches
                 {
                     IsStart = true,
                     InteractiveId = interactive.Id,
-                    InteractionType = interactionResult.InteractionType
+                    InteractionType = interactionResult.InteractionType,
+                    HasKey = false
                 };
             }
             player.CommonPlayerPacket.ToggleSend();

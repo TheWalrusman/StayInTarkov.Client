@@ -93,7 +93,8 @@ namespace StayInTarkov.Coop.Player.InteractionPatches
                     {
                         IsStart = true,
                         InteractiveId = interactive.Id,
-                        InteractionType = interactionResult.InteractionType
+                        InteractionType = interactionResult.InteractionType,
+                        HasKey = false
                     };
                 }
                 botPlayer.CommonPlayerPacket.ToggleSend();
@@ -150,7 +151,8 @@ namespace StayInTarkov.Coop.Player.InteractionPatches
                 {
                     IsStart = true,
                     InteractiveId = interactive.Id,
-                    InteractionType = interactionResult.InteractionType
+                    InteractionType = interactionResult.InteractionType,
+                    HasKey = false
                 };
             }
             player.CommonPlayerPacket.ToggleSend();

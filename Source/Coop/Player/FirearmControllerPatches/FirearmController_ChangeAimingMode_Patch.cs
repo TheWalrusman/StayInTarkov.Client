@@ -10,7 +10,6 @@ namespace SIT.Core.Coop.Player.FirearmControllerPatches
     internal class FirearmController_ChangeAimingMode_Patch : ModuleReplicationPatch
     {
         public override Type InstanceType => typeof(EFT.Player.FirearmController);
-
         public override string MethodName => "CheckFireMode";
 
         protected override MethodBase GetTargetMethod()
@@ -35,7 +34,6 @@ namespace SIT.Core.Coop.Player.FirearmControllerPatches
 
             player.WeaponPacket.CheckFireMode = true;
             player.WeaponPacket.ToggleSend();
-
         }
 
         public override void Replicated(EFT.Player player, Dictionary<string, object> dict)

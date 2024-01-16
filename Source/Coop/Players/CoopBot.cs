@@ -225,6 +225,19 @@ namespace StayInTarkov.Coop
             {
                 HandleCommonPacket();
             }
+
+            // Temp test to fix AI dying from hydration and energy...
+            if (ActiveHealthController.Energy.Current < 1)
+            {
+                EFT.UI.ConsoleScreen.Log($"Setting energy to 50 on {ProfileId}");
+                ActiveHealthController.ChangeEnergy(50);
+            }
+
+            if (ActiveHealthController.Hydration.Current < 1)
+            {
+                EFT.UI.ConsoleScreen.Log($"Setting hydration to 50 on {ProfileId}");
+                ActiveHealthController.ChangeHydration(50);
+            }
         }
 
         //protected override void HandleHealthPacket()

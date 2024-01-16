@@ -2,7 +2,6 @@
 using Newtonsoft.Json;
 using StayInTarkov.Configuration;
 using StayInTarkov.Networking;
-using StayInTarkov.UI;
 using System;
 using System.Collections.Generic;
 using System.Reflection;

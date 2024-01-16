@@ -376,7 +376,7 @@ namespace StayInTarkov
             new ChangeHealthPatch().Enable();
             new ChangeHydrationPatch().Enable();
             new ChangeEnergyPatch().Enable();
-            new OnDeadPatch().Enable();
+            //new OnDeadPatch().Enable();
             new MainMenuControllerForHealthListenerPatch().Enable();
         }
 

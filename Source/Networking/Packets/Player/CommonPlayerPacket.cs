@@ -22,6 +22,9 @@ namespace StayInTarkov.Networking.Packets
         public bool SetInventoryOpen { get; set; }
         public bool HasDrop { get; set; }
         public DropPacket DropPacket { get; set; }
+        public bool HasStationaryPacket { get; set; }
+        public StationaryPacket StationaryPacket { get; set; }
+
 
         public CommonPlayerPacket(string profileId)
         {
@@ -32,6 +35,7 @@ namespace StayInTarkov.Networking.Packets
             HasHeadLightsPacket = false;
             HasInventoryChanged = false;
             HasDrop = false;
+            HasStationaryPacket = false;
         }
         public void Deserialize(NetDataReader reader)
         {
@@ -55,6 +59,11 @@ namespace StayInTarkov.Networking.Packets
             if (HasInventoryChanged)
                 SetInventoryOpen = reader.GetBool();
             HasDrop = reader.GetBool();
+            //if (HasDrop)
+            //    DropPacket = DropPacket.Deserialize(reader);
+            HasStationaryPacket = reader.GetBool();
+            if (HasStationaryPacket)
+                StationaryPacket = StationaryPacket.Deserialize(reader);
         }
 
         public void Serialize(NetDataWriter writer)
@@ -79,6 +88,11 @@ namespace StayInTarkov.Networking.Packets
             if (HasInventoryChanged)
                 writer.Put(SetInventoryOpen);
             writer.Put(HasDrop);
+            //if (HasDrop)
+            //    DropPacket.Serialize(writer, DropPacket);
+            writer.Put(HasStationaryPacket);
+            if (HasStationaryPacket)
+                StationaryPacket.Serialize(writer, StationaryPacket);
         }
 
         public void ToggleSend()

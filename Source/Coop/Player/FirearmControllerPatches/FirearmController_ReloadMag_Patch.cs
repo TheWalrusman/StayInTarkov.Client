@@ -1,4 +1,5 @@
-﻿using StayInTarkov.Coop.Players;
+﻿using Comfort.Common;
+using StayInTarkov.Coop.Players;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -64,8 +65,7 @@ namespace StayInTarkov.Coop.Player.FirearmControllerPatches
                     };
                     player.WeaponPacket.ToggleSend();
                     return;
-                }
-                
+                }                
             }
         }
 

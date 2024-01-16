@@ -18,6 +18,8 @@ namespace StayInTarkov.Networking.Packets
         public ApplyDamageInfoPacket ApplyDamageInfo { get; set; }
         public bool HasBodyPartRestoreInfo { get; set; }
         public RestoreBodyPartPacket RestoreBodyPartPacket { get; set; }
+        public bool HasBodyPartDestroyInfo { get; set; }
+        public DestroyBodyPartPacket DestroyBodyPartPacket { get; set; }
         public bool HasChangeHealthPacket { get; set; }
         public ChangeHealthPacket ChangeHealthPacket { get; set; }
         public bool HasEnergyChange { get; set; }
@@ -36,6 +38,7 @@ namespace StayInTarkov.Networking.Packets
             ProfileId = profileId;
             HasDamageInfo = false;
             HasBodyPartRestoreInfo = false;
+            HasBodyPartDestroyInfo = false;
             HasChangeHealthPacket = false;
             HasEnergyChange = false;
             HasHydrationChange = false;
@@ -53,6 +56,9 @@ namespace StayInTarkov.Networking.Packets
             HasBodyPartRestoreInfo = reader.GetBool();
             if (HasBodyPartRestoreInfo)
                 RestoreBodyPartPacket = RestoreBodyPartPacket.Deserialize(reader);
+            HasBodyPartDestroyInfo = reader.GetBool();
+            if (HasBodyPartDestroyInfo)
+                DestroyBodyPartPacket = DestroyBodyPartPacket.Deserialize(reader);
             HasChangeHealthPacket = reader.GetBool();
             if (HasChangeHealthPacket)
                 ChangeHealthPacket = ChangeHealthPacket.Deserialize(reader);
@@ -82,6 +88,9 @@ namespace StayInTarkov.Networking.Packets
             writer.Put(HasBodyPartRestoreInfo);
             if (HasBodyPartRestoreInfo)
                 RestoreBodyPartPacket.Serialize(writer, RestoreBodyPartPacket);
+            writer.Put(HasBodyPartDestroyInfo);
+            if (HasBodyPartDestroyInfo)
+                DestroyBodyPartPacket.Serialize(writer, DestroyBodyPartPacket);
             writer.Put(HasChangeHealthPacket);
             if (HasChangeHealthPacket)
                 ChangeHealthPacket.Serialize(writer, ChangeHealthPacket);

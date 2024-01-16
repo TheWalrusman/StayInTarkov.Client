@@ -102,7 +102,7 @@ namespace StayInTarkov.Configuration
             public bool SETTING_ShowSITStatistics { get; set; } = true;
             public int SITWebSocketPort { get; set; } = 6970;
             public int SITGamePlayPort { get; set; } = 25565;
-            public string SITGamePlayIP { get; set; } = "127.0.0.1";
+            public bool UseUPnP { get; set; } = false;
 
             public bool AllPlayersSpawnTogether { get; set; } = true;
             public bool ArenaMode { get; set; } = false;
@@ -141,9 +141,9 @@ namespace StayInTarkov.Configuration
 
                 SITWebSocketPort = StayInTarkovPlugin.Instance.Config.Bind("Coop", "SITPort", 6970, new ConfigDescription("SIT.Core Websocket Port DEFAULT = 6970")).Value;
 
-                SITGamePlayPort = StayInTarkovPlugin.Instance.Config.Bind("Coop", "GameplayPort", 25565, new ConfigDescription("Port to use for UDP packets. DEFAULT = 25565")).Value;
+                SITGamePlayPort = StayInTarkovPlugin.Instance.Config.Bind("Network", "GameplayPort", 25565, new ConfigDescription("Port to use for UDP packets. DEFAULT = 25565")).Value;
 
-                SITGamePlayIP = StayInTarkovPlugin.Instance.Config.Bind("Coop", "GameplayIP", "127.0.0.1", new ConfigDescription("The IP to connect to for UDP connections. DEFAULT = 127.0.0.1")).Value;
+                UseUPnP = StayInTarkovPlugin.Instance.Config.Bind("Network", "Use UPnP", false, new ConfigDescription("Attempt to open ports using UPnP. Useful if you cannot open ports yourself but the router supports UPnP. DEFAULT = false")).Value;
 
                 AllPlayersSpawnTogether = StayInTarkovPlugin.Instance.Config.Bind
                ("Coop", "AllPlayersSpawnTogether", true, new ConfigDescription("Whether to spawn all players in the same place")).Value;
@@ -174,7 +174,7 @@ namespace StayInTarkov.Configuration
                 Logger.LogDebug($"SETTING_ShowFeed: {SETTING_ShowSITStatistics}");
                 Logger.LogDebug($"SITWebSocketPort: {SITWebSocketPort}");
                 Logger.LogDebug($"SITGamePlayPort: {SITGamePlayPort}");
-                Logger.LogDebug($"SITGamePlayIP: {SITGamePlayIP}");
+                Logger.LogDebug($"SITGamePlayIP: {UseUPnP}");
                 Logger.LogDebug($"AllPlayersSpawnTogether: {AllPlayersSpawnTogether}");
                 Logger.LogDebug($"ArenaMode: {ArenaMode}");
                 Logger.LogDebug($"ForceHighPingMode: {ForceHighPingMode}");

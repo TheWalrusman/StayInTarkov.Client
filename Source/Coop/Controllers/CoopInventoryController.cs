@@ -25,38 +25,9 @@ namespace StayInTarkov.Coop
         public CoopInventoryController(EFT.Player player, Profile profile, bool examined) : base(player, profile, examined)
         {
             BepInLogger = BepInEx.Logging.Logger.CreateLogSource(nameof(CoopInventoryController));
-            this.Player = player;
+            Player = player;
             if (profile.ProfileId.StartsWith("pmc") && !IsDiscardLimitsFine(DiscardLimits))
-                base.ResetDiscardLimits();
-        }
-
-        public override Task<IResult> LoadMagazine(BulletClass sourceAmmo, MagazineClass magazine, int loadCount, bool ignoreRestrictions)
-        {
-            //BepInLogger.LogInfo("LoadMagazine");
-            return base.LoadMagazine(sourceAmmo, magazine, loadCount, ignoreRestrictions);
-        }
-
-        public override Task<IResult> UnloadMagazine(MagazineClass magazine)
-        {
-            return base.UnloadMagazine(magazine);
-            //Task<IResult> result;
-            //ItemControllerHandler_Move_Patch.DisableForPlayer.Add(Profile.ProfileId);
-
-            //BepInLogger.LogInfo("UnloadMagazine");
-            //ItemPlayerPacket unloadMagazinePacket = new(Profile.ProfileId, magazine.Id, magazine.TemplateId, "PlayerInventoryController_UnloadMagazine");
-            //var serialized = unloadMagazinePacket.Serialize();
-
-            ////if (AlreadySent.Contains(serialized))
-            //{
-            //    result = base.UnloadMagazine(magazine);
-            //    ItemControllerHandler_Move_Patch.DisableForPlayer.Remove(Profile.ProfileId);
-            //}
-
-            ////AlreadySent.Add(serialized);
-
-            //AkiBackendCommunication.Instance.SendDataToPool(serialized);
-            //result = base.UnloadMagazine(magazine);
-            //ItemControllerHandler_Move_Patch.DisableForPlayer.Remove(Profile.ProfileId);
+                ResetDiscardLimits();
         }
 
         public override void ThrowItem(Item item, IEnumerable<ItemsCount> destroyedItems, Callback callback = null, bool downDirection = false)

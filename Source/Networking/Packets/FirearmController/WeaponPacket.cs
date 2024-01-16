@@ -16,6 +16,8 @@ namespace StayInTarkov.Networking.Packets
         public bool HasMalfunction { get; set; }
         public Weapon.EMalfunctionState MalfunctionState { get; set; }
         public bool IsTriggerPressed { get; set; }
+        public bool HasShotInfo { get; set; }
+        public ShotInfoPacket ShotInfoPacket { get; set; }
         public bool ChangeFireMode { get; set; }
         public Weapon.EFireMode FireMode { get; set; }
         public bool ToggleAim { get; set; }
@@ -56,6 +58,7 @@ namespace StayInTarkov.Networking.Packets
             ProfileId = profileId;
             HasMalfunction = false;
             IsTriggerPressed = false;
+            HasShotInfo = false;
             ChangeFireMode = false;
             ToggleAim = false;
             ExamineWeapon = false;
@@ -87,6 +90,9 @@ namespace StayInTarkov.Networking.Packets
             if (HasMalfunction)
                 MalfunctionState = (Weapon.EMalfunctionState)reader.GetInt();
             IsTriggerPressed = reader.GetBool();
+            HasShotInfo = reader.GetBool();
+            if (HasShotInfo)
+                ShotInfoPacket = ShotInfoPacket.Deserialize(reader);
             ChangeFireMode = reader.GetBool();
             FireMode = (Weapon.EFireMode)reader.GetInt();
             ToggleAim = reader.GetBool();
@@ -141,6 +147,9 @@ namespace StayInTarkov.Networking.Packets
             if (HasMalfunction)
                 writer.Put((int)MalfunctionState);
             writer.Put(IsTriggerPressed);
+            writer.Put(HasShotInfo);
+            if (HasShotInfo)
+                ShotInfoPacket.Serialize(writer, ShotInfoPacket);
             writer.Put(ChangeFireMode);
             writer.Put((int)FireMode);
             writer.Put(ToggleAim);

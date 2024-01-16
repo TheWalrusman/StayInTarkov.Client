@@ -46,7 +46,7 @@ namespace StayInTarkov.Coop.ItemControllerPatches
             using MemoryStream memoryStream = new();
             using (BinaryWriter binaryWriter = new(memoryStream))
             {
-                binaryWriter.WritePolymorph(OperationToDescriptorHelpers.FromInventoryOperation(operation, false, false));
+                binaryWriter.WritePolymorph(OperationToDescriptorHelpers.FromInventoryOperation(operation, true));
                 var opBytes = memoryStream.ToArray();
                 player.InventoryPacket.ItemControllerExecutePacket = new()
                 {
@@ -55,7 +55,6 @@ namespace StayInTarkov.Coop.ItemControllerPatches
                     OperationBytes = opBytes,
                     InventoryId = __instance.ID
                 };
-                EFT.UI.ConsoleScreen.Log($"Operation: {operation.GetType().Name}, IC Name: {__instance.Name}");
             }
             player.InventoryPacket.ToggleSend();
         }

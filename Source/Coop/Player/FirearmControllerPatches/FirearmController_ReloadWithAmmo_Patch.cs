@@ -1,13 +1,8 @@
-﻿using EFT.InventoryLogic;
-using StayInTarkov.Coop.ItemControllerPatches;
-using StayInTarkov.Coop.Matchmaker;
-using StayInTarkov.Coop.Players;
+﻿using StayInTarkov.Coop.Players;
 using StayInTarkov.Networking;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
-using UnityEngine;
 
 namespace StayInTarkov.Coop.Player.FirearmControllerPatches
 {

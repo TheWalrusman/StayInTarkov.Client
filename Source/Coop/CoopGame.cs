@@ -197,11 +197,14 @@ namespace StayInTarkov.Coop
                 throw new Exception("No Server Id found");
             }
 
+            // Tie these directly to CoopGame instead?
             if (MatchmakerAcceptPatches.IsServer)
             {
-                //StartCoroutine(HostPinger());
-                //StartCoroutine(GameTimerSync());
-                //StartCoroutine(TimeAndWeatherSync());
+                CoopPatches.CoopGameComponentParent.AddComponent<SITServer>();
+            }
+            else if (MatchmakerAcceptPatches.IsClient)
+            {
+                CoopPatches.CoopGameComponentParent.AddComponent<SITClient>();
             }
 
             StartCoroutine(ClientLoadingPinger());
@@ -213,7 +216,7 @@ namespace StayInTarkov.Coop
 
         private IEnumerator ClientLoadingPinger()
         {
-            var waitSeconds = new WaitForSeconds(1f);
+            var waitSeconds = new WaitForSeconds(5);
 
             while (true)
             {
@@ -333,7 +336,7 @@ namespace StayInTarkov.Coop
                 }
 
 
-            }            
+            }
             return localPlayer;
         }
 
@@ -446,7 +449,7 @@ namespace StayInTarkov.Coop
                , EPointOfView.FirstPerson
                , profile
                , aiControl: false
-               , base.UpdateQueue
+               , UpdateQueue
                , armsUpdateMode
                , EFT.Player.EUpdateMode.Auto
                , BackendConfigManager.Config.CharacterController.ClientPlayerMode
@@ -498,7 +501,7 @@ namespace StayInTarkov.Coop
                                 }
                                 await Task.Delay(1000);
                             } while (numbersOfPlayersToWaitFor > 0);
-                        } 
+                        }
                     }
                     else if (MatchmakerAcceptPatches.IsClient)
                     {
@@ -630,7 +633,7 @@ namespace StayInTarkov.Coop
                 , true);
 
             BotCreator botCreator = new(this, profileCreator, CreatePhysicalBot);
-            BotZone[] botZones = LocationScene.GetAllObjects<BotZone>(false).ToArray<BotZone>();
+            BotZone[] botZones = LocationScene.GetAllObjects<BotZone>(false).ToArray();
             PBotsController.Init(this
                 , botCreator
                 , botZones
@@ -933,6 +936,19 @@ namespace StayInTarkov.Coop
         public override void Dispose()
         {
             Logger.LogDebug("CoopGame:Dispose()");
+
+            // Add these to coopgame directly?
+            if (MatchmakerAcceptPatches.IsServer)
+            {
+                Singleton<SITServer>.Instance.NetServer.Stop();
+                Singleton<SITServer>.TryRelease(Singleton<SITServer>.Instance);
+            }
+            else if (MatchmakerAcceptPatches.IsClient)
+            {
+                Singleton<SITClient>.Instance.NetClient.Stop();
+                Singleton<SITClient>.TryRelease(Singleton<SITClient>.Instance);
+            }
+
             StartCoroutine(DisposingCo());
             base.Dispose();
         }

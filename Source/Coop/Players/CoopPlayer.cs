@@ -1,11 +1,12 @@
 ﻿using BepInEx.Logging;
 using Comfort.Common;
 using EFT;
-using EFT.Communications;
+using EFT.AssetsManager;
 using EFT.HealthSystem;
 using EFT.Interactive;
 using EFT.InventoryLogic;
 using LiteNetLib.Utils;
+using StayInTarkov.Configuration;
 using StayInTarkov.Coop.ItemControllerPatches;
 using StayInTarkov.Coop.Matchmaker;
 using StayInTarkov.Coop.PacketQueues;
@@ -17,6 +18,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using UnityEngine;
 
@@ -29,7 +31,7 @@ namespace StayInTarkov.Coop.Players
         public SITServer Server { get; set; }
         public SITClient Client { get; set; }
         public NetDataWriter Writer { get; set; }
-        private float InterpolationRatio { get; set; } = 0.5f;
+        private float InterpolationRatio { get; set; } = 0.2f;
         public PlayerStatePacket LastState { get; set; }
         public PlayerStatePacket NewState { get; set; }
         public WeaponPacket WeaponPacket = new("null");
@@ -134,7 +136,7 @@ namespace StayInTarkov.Coop.Players
                     Absorbed = absorbed,
                     //ProfileId = damageInfo.Player == null ? "null" : damageInfo.Player.iPlayer.ProfileId
                 };
-                HealthPacket.ToggleSend(); 
+                HealthPacket.ToggleSend();
             }
 
             base.ApplyDamageInfo(damageInfo, bodyPartType, absorbed, headSegment);
@@ -338,9 +340,43 @@ namespace StayInTarkov.Coop.Players
             {
                 CommonPlayerPacket.Phrase = @event;
                 CommonPlayerPacket.PhraseIndex = clip.NetId;
-                CommonPlayerPacket.ToggleSend(); 
+                CommonPlayerPacket.ToggleSend();
             }
         }
+
+        public override void OperateStationaryWeapon(StationaryWeapon stationaryWeapon, StationaryWeaponPacket.EStationaryCommand command)
+        {
+            base.OperateStationaryWeapon(stationaryWeapon, command);
+            CommonPlayerPacket.HasStationaryPacket = true;
+            CommonPlayerPacket.StationaryPacket = new()
+            {
+                Command = (SITSerialization.StationaryPacket.EStationaryCommand)command,
+                Id = stationaryWeapon.Id
+            };
+            CommonPlayerPacket.ToggleSend();
+        }
+
+        //private void ObservedOperateStationaryWeapon(StationaryWeapon stationaryWeapon, SITSerialization.StationaryPacket.EStationaryCommand command)
+        //{
+        //    if (command == SITSerialization.StationaryPacket.EStationaryCommand.Occupy)
+        //    {
+        //        stationaryWeapon.SetOperator(TryGetId, false);
+        //        MovementContext.StationaryWeapon = stationaryWeapon;
+        //        MovementContext.InteractionParameters = stationaryWeapon.GetInteractionParameters();
+        //        MovementContext.PlayerAnimatorSetApproached(false);
+        //        MovementContext.PlayerAnimatorSetStationary(true);
+        //        MovementContext.PlayerAnimatorSetStationaryAnimation((int)stationaryWeapon.Animation);
+        //        return;
+        //    }
+        //    if (command == SITSerialization.StationaryPacket.EStationaryCommand.Denied)
+        //    {
+        //        MovementContext.PlayerAnimatorSetStationary(false);
+        //        if (MovementContext.StationaryWeapon != null)
+        //        {
+        //            MovementContext.StationaryWeapon.Unlock(TryGetId);
+        //        }
+        //    }
+        //}
 
         protected virtual void ReceiveSay(EPhraseTrigger trigger, int index)
         {
@@ -529,12 +565,15 @@ namespace StayInTarkov.Coop.Players
         {
             if (MatchmakerAcceptPatches.IsServer && IsYourPlayer)
             {
-                Server = this.GetOrAddComponent<SITServer>();
+                //Server = this.GetOrAddComponent<SITServer>();
+                Server = Singleton<SITServer>.Instance;
             }
             else if (IsYourPlayer)
             {
-                Client = this.GetOrAddComponent<SITClient>();
-                Client.MyPlayer = this;
+                //Client = this.GetOrAddComponent<SITClient>();
+                //Client.MyPlayer = this;
+                Client = Singleton<SITClient>.Instance;
+                Singleton<SITClient>.Instance.MyPlayer = this;
             }
 
             Writer = new();
@@ -599,6 +638,7 @@ namespace StayInTarkov.Coop.Players
             if (packet.HasWorldInteractionPacket)
             {
                 // TODO: Fix performance on the checker
+                // GClass1136.ProcessFrame
 
                 if (!CoopGameComponent.TryGetCoopGameComponent(out CoopGameComponent coopGameComponent))
                 {
@@ -614,9 +654,9 @@ namespace StayInTarkov.Coop.Players
 
                 WorldInteractiveObject worldInteractiveObject = coopGameComponent.ListOfInteractiveObjects.FirstOrDefault(x => x.Id == packet.WorldInteractionPacket.InteractiveId);
 
-                if (worldInteractiveObject == null)
+                if (worldInteractiveObject == null || !worldInteractiveObject.isActiveAndEnabled)
                 {
-                    EFT.UI.ConsoleScreen.LogError("HandleCommonPacket::WorldInteractionPacket: WorldInteractiveObject was null!");
+                    EFT.UI.ConsoleScreen.LogError("HandleCommonPacket::WorldInteractionPacket: WorldInteractiveObject was null or disabled!");
                     goto SkipWorld;
                 }
 
@@ -668,14 +708,14 @@ namespace StayInTarkov.Coop.Players
                 }
             }
 
-            SkipWorld:
+        SkipWorld:
 
             if (packet.HasContainerInteractionPacket)
             {
                 CoopGameComponent coopGameComponent = CoopGameComponent.GetCoopGameComponent();
                 LootableContainer lootableContainer = coopGameComponent.ListOfInteractiveObjects.FirstOrDefault(x => x.Id == packet.ContainerInteractionPacket.InteractiveId) as LootableContainer;
 
-                if (lootableContainer != null)
+                if (lootableContainer != null && lootableContainer.isActiveAndEnabled)
                 {
                     string methodName = string.Empty;
                     switch (packet.ContainerInteractionPacket.InteractionType)
@@ -711,7 +751,6 @@ namespace StayInTarkov.Coop.Players
 
             if (packet.HasProceedPacket)
             {
-                EFT.UI.ConsoleScreen.Log("I received a ProceedPacket");
                 switch (packet.ProceedPacket.ProceedType)
                 {
                     case SITSerialization.EProceedType.EmptyHands:
@@ -912,6 +951,12 @@ namespace StayInTarkov.Coop.Players
                     EFT.UI.ConsoleScreen.LogError($"CommonPlayerPacket::DropPacket: Could not find ItemID {packet.DropPacket.ItemId}!");
                 }
             }
+
+            if (packet.HasStationaryPacket)
+            {
+                StationaryWeapon stationaryWeapon = (packet.StationaryPacket.Command == SITSerialization.StationaryPacket.EStationaryCommand.Occupy) ? Singleton<GameWorld>.Instance.FindStationaryWeapon(packet.StationaryPacket.Id) : null;
+                base.OperateStationaryWeapon(stationaryWeapon, (StationaryWeaponPacket.EStationaryCommand)packet.StationaryPacket.Command);
+            }
         }
 
         public override void OnDead(EDamageType damageType)
@@ -924,10 +969,27 @@ namespace StayInTarkov.Coop.Players
                     DamageType = damageType,
                     ProfileId = (LastDamageInfo.Player != null && LastDamageInfo.Player.iPlayer != null) ? LastDamageInfo.Player.iPlayer.ProfileId : "null"
                 };
-                HealthPacket.ToggleSend(); 
+                HealthPacket.ToggleSend();
             }
             HasDied = true;
             base.OnDead(damageType);
+            if (PluginConfigSettings.Instance.CoopSettings.SETTING_ShowFeed)
+                NotificationManagerClass.DisplayMessageNotification(LastAggressor != null ? $"\"{GeneratePlayerNameWithSide(LastAggressor)}\" killed \"{GeneratePlayerNameWithSide(this)}\"" : $"\"{GeneratePlayerNameWithSide(this)}\" has died because of \"{("DamageType_" + damageType.ToString()).Localized()}\"");
+        }
+
+        public string GeneratePlayerNameWithSide(IAIDetails player)
+        {
+            if (player == null)
+                return "";
+
+            var side = "Scav";
+
+            if (player.AIData.IAmBoss)
+                side = "Boss";
+            else if (player.Side != EPlayerSide.Savage)
+                side = player.Side.ToString();
+
+            return $"[{side}] {player.Profile.GetCorrectedNickname()}";
         }
 
         protected virtual void HandleInventoryPacket()
@@ -944,7 +1006,9 @@ namespace StayInTarkov.Coop.Players
                 if (inventory != null)
                 {
                     // Look at method_117 on NetworkPlayer
+                    // ObservedPlayer.method_150
                     // UnloadMag does not work: AmmoManipulationOperation.vmethod_0 NullReferenceException: Object reference not set to an instance of an object
+                    // This is most likely due to InternalOperation not being set on that Operation ...
                     using MemoryStream memoryStream = new(packet.ItemControllerExecutePacket.OperationBytes);
                     using BinaryReader binaryReader = new(memoryStream);
                     try
@@ -952,11 +1016,23 @@ namespace StayInTarkov.Coop.Players
                         var convOp = binaryReader.ReadPolymorph<AbstractDescriptor1>();
                         var result = ToInventoryOperation(convOp);
 
-                        if (result.Succeeded)
+                        ItemController_Execute_Patch.RunLocally = false;
+                        inventory.Execute(result.Value, new Callback((r) =>
                         {
-                            ItemController_Execute_Patch.RunLocally = false;
-                            inventory.Execute(result.Value, null);
-                        }
+                            if (!r.Succeed)
+                            {
+                                EFT.UI.ConsoleScreen.Log($"Error during InventoryOperation on ObservedPlayer! ErrorCode: {r.ErrorCode}, Error: {r.Error}, Failed: {r.Failed}");
+                                Debug.Log($"Error during InventoryOperation on ObservedPlayer '{Profile.Nickname}'! ErrorCode: {r.ErrorCode}, Error: {r.Error}, Failed: {r.Failed}");
+                            }
+                        }));
+                        //result.Value.vmethod_0(new Callback((r) =>
+                        //{
+                        //    if (!r.Succeed)
+                        //    {
+                        //        EFT.UI.ConsoleScreen.Log($"Error during InventoryOperation on ObservedPlayer! ErrorCode: {r.ErrorCode}, Error: {r.Error}, Failed: {r.Failed}");
+                        //        Debug.Log($"Error during InventoryOperation on ObservedPlayer '{Profile.Nickname}'! ErrorCode: {r.ErrorCode}, Error: {r.Error}, Failed: {r.Failed}");
+                        //    }
+                        //}));
                     }
                     catch (Exception exception)
                     {
@@ -1014,18 +1090,118 @@ namespace StayInTarkov.Coop.Players
 
             if (firearmController != null)
             {
-                if (packet.HasMalfunction)
+                //if (packet.HasMalfunction)
+                //{
+                //    firearmController.Weapon.MalfState.ChangeStateSilent(packet.MalfunctionState);
+                //    if (packet.MalfunctionState != Weapon.EMalfunctionState.None)
+                //    {
+                //        firearmController.Weapon.MalfState.AddPlayerWhoKnowMalfunction(Profile.Id, false);
+                //    }
+                //}
+
+                //firearmController.SetTriggerPressed(false);
+                //if (packet.IsTriggerPressed)
+                //    firearmController.SetTriggerPressed(true);
+
+                if (packet.HasShotInfo)
                 {
-                    firearmController.Weapon.MalfState.ChangeStateSilent(packet.MalfunctionState);
-                    if (packet.MalfunctionState != Weapon.EMalfunctionState.None)
+                    if (packet.ShotInfoPacket.ShotType != EShotType.RegularShot && packet.ShotInfoPacket.ShotType != EShotType.DryFire)
                     {
-                        firearmController.Weapon.MalfState.AddPlayerWhoKnowMalfunction(Profile.Id, false);
+                        switch (packet.ShotInfoPacket.ShotType)
+                        {
+                            case EShotType.Misfire:
+                                firearmController.Weapon.MalfState.State = Weapon.EMalfunctionState.Misfire;
+                                break;
+                            case EShotType.Feed:
+                                firearmController.Weapon.MalfState.State = Weapon.EMalfunctionState.Feed;
+                                break;
+                            case EShotType.JamedShot:
+                                firearmController.Weapon.MalfState.State = Weapon.EMalfunctionState.Jam;
+                                break;
+                            case EShotType.SoftSlidedShot:
+                                firearmController.Weapon.MalfState.State = Weapon.EMalfunctionState.SoftSlide;
+                                break;
+                            case EShotType.HardSlidedShot:
+                                firearmController.Weapon.MalfState.State = Weapon.EMalfunctionState.HardSlide;
+                                break;
+                        }
+
+                        firearmController.Weapon.MalfState.MalfunctionedAmmo = (BulletClass)Singleton<ItemFactory>.Instance.CreateItem(MongoID.Generate(), packet.ShotInfoPacket.AmmoTemplate, null);
+                        //WeaponPrefab weaponPrefab = ReflectionHelpers.GetFieldOrPropertyFromInstance<WeaponPrefab>(firearmController, "asd");
+                        WeaponPrefab weaponPrefab = firearmController.ControllerGameObject.GetComponent<WeaponPrefab>();
+                        if (weaponPrefab != null)
+                        {
+                            weaponPrefab.InitMalfunctionState(firearmController.Weapon, false, false, out AmmoPoolObject ammoPoolObject);
+                            if (packet.ShotInfoPacket.ShotType == EShotType.Misfire)
+                            {
+                                weaponPrefab.RevertMalfunctionState(firearmController.Weapon, true, true);
+                            }
+                        }
+                        else
+                        {
+                            EFT.UI.ConsoleScreen.LogError("ShotInfoPacket: WeaponPrefab was null!");
+                        }
+                    }
+                    else if (packet.ShotInfoPacket.ShotType == EShotType.DryFire)
+                    {
+                        firearmController.DryShot();
+                    }
+                    else if (packet.ShotInfoPacket.ShotType == EShotType.RegularShot)
+                    {
+                        BulletClass ammo = (BulletClass)Singleton<ItemFactory>.Instance.CreateItem(MongoID.Generate(), packet.ShotInfoPacket.AmmoTemplate, null);
+                        firearmController.InitiateShot(firearmController.Item, ammo, packet.ShotInfoPacket.ShotPosition, packet.ShotInfoPacket.ShotDirection,
+                            packet.ShotInfoPacket.FireportPosition, packet.ShotInfoPacket.ChamberIndex, packet.ShotInfoPacket.Overheat);                        
+
+                        float pitchMult = firearmController.method_54();
+                        firearmController.WeaponSoundPlayer.FireBullet(ammo, packet.ShotInfoPacket.ShotPosition, packet.ShotInfoPacket.ShotDirection.normalized,
+                            pitchMult, firearmController.Malfunction, false, firearmController.IsBirstOf2Start);
+
+                        MagazineClass magazine = firearmController.Weapon.GetCurrentMagazine();
+
+                        //firearmController.FirearmsAnimator.SetFire(true);
+
+                        if (firearmController.Weapon.HasChambers)
+                        {
+                            firearmController.Weapon.Chambers[0].RemoveItem(false);  
+                            if (firearmController.Weapon.BoltAction)
+                            {
+                                firearmController.FirearmsAnimator.SetBoltActionReload(true);
+                                firearmController.FirearmsAnimator.SetFire(true);
+                                StartCoroutine(ObservedBoltAction(firearmController.FirearmsAnimator));
+                            }
+                            WeaponEffectsManager weaponEffectsManager = firearmController.ControllerGameObject.GetComponent<WeaponPrefab>().ObjectInHands as WeaponEffectsManager;
+                            if (weaponEffectsManager != null)
+                            {
+                                //weaponEffectsManager.MoveAmmoFromChamberToShellPort(ammo.IsUsed, 0);
+                                weaponEffectsManager.DestroyPatronInWeapon(packet.ShotInfoPacket.ChamberIndex);
+                                weaponEffectsManager.CreatePatronInShellPort(ammo, packet.ShotInfoPacket.ChamberIndex);
+                                if (firearmController.Weapon is not GWeapon5 || firearmController.Weapon.ReloadMode != Weapon.EReloadMode.OnlyBarrel || !firearmController.Weapon.BoltAction)
+                                    weaponEffectsManager.StartSpawnShell(Velocity, 0);                                
+
+                                if (magazine != null && !firearmController.Weapon.BoltAction)
+                                {
+                                    weaponEffectsManager.SetRoundIntoWeapon(ammo, 0);
+                                }
+                            }
+                        }
+
+                        ammo.IsUsed = true;                        
+                        
+                        if (magazine != null && !firearmController.Weapon.BoltAction)
+                        {
+                            magazine.Cartridges.PopTo(_inventoryController, new SlotItemAddress(firearmController.Item.Chambers[0]));
+                        }
+
+                        if (firearmController.Weapon.IsBoltCatch && firearmController.Weapon.ChamberAmmoCount == 0 && firearmController.Weapon.GetCurrentMagazineCount() == 0 && !firearmController.Weapon.ManualBoltCatch)
+                            firearmController.FirearmsAnimator.SetBoltCatch(true);
+                        else if (firearmController.Weapon.IsBoltCatch && !firearmController.Weapon.ManualBoltCatch && firearmController.FirearmsAnimator.GetBoltCatch())
+                            firearmController.FirearmsAnimator.SetBoltCatch(false);
+                        
+                        //firearmController.FirearmsAnimator.SetFire(false);
+
+                        //firearmController.FirearmsAnimator.SetBoltActionReload(true);
                     }
                 }
-
-                firearmController.SetTriggerPressed(false);
-                if (packet.IsTriggerPressed)
-                    firearmController.SetTriggerPressed(true);
 
                 if (packet.ChangeFireMode)
                     firearmController.ChangeFireMode(packet.FireMode);
@@ -1298,6 +1474,11 @@ namespace StayInTarkov.Coop.Players
                 ActiveHealthController.RestoreBodyPart(packet.RestoreBodyPartPacket.BodyPartType, packet.RestoreBodyPartPacket.HealthPenalty);
             }
 
+            if (packet.HasBodyPartDestroyInfo)
+            {
+                ActiveHealthController.DestroyBodyPart(packet.DestroyBodyPartPacket.BodyPartType, packet.DestroyBodyPartPacket.DamageType);
+            }
+
             if (packet.HasChangeHealthPacket)
             {
                 DamageInfo dInfo = new()
@@ -1356,17 +1537,25 @@ namespace StayInTarkov.Coop.Players
                 {
                     firearmController.SetTriggerPressed(false);
                 }
-                //if (packet.ObservedDeathPacket.ProfileId != "null")
-                //{
-                //    var player = Singleton<GameWorld>.Instance.GetAlivePlayerByProfileID(packet.ObservedDeathPacket.ProfileId);
-                //    if (player != null)
-                //    {
-                //        LastAggressor = player;
-                //    }
-                //}
+                if (packet.ObservedDeathPacket.ProfileId != "null")
+                {
+                    var player = Singleton<GameWorld>.Instance.GetAlivePlayerByProfileID(packet.ObservedDeathPacket.ProfileId);
+                    if (player != null)
+                    {
+                        LastAggressor = player;
+                    }
+                }
                 HasDied = true;
-                ActiveHealthController.Kill(packet.ObservedDeathPacket.DamageType);             
+                ActiveHealthController.Kill(packet.ObservedDeathPacket.DamageType);
             }
+        }
+
+        private IEnumerator ObservedBoltAction(FirearmsAnimator animator)
+        {
+            yield return new WaitForSeconds(1.5f);
+
+            animator.SetBoltActionReload(false);
+            animator.SetFire(false);
         }
 
         public override void OnDestroy()

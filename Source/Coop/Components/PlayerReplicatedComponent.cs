@@ -229,14 +229,14 @@ namespace StayInTarkov.Core.Player
                 //    //playerMovePatch?.Replicated(player, packet);
                 //}
 
-                if (packet.ContainsKey("alive"))
-                {
-                    bool isCharAlive = bool.Parse(packet.ContainsKey("alive").ToString());
-                    if (!isCharAlive && player.ActiveHealthController.IsAlive)
-                    {
-                        player.ActiveHealthController.Kill(Player_ApplyDamageInfo_Patch.LastDamageTypes.ContainsKey(packet["profileId"].ToString()) ? Player_ApplyDamageInfo_Patch.LastDamageTypes[packet["profileId"].ToString()] : EDamageType.Undefined);
-                    }
-                }
+                //if (packet.ContainsKey("alive"))
+                //{
+                //    bool isCharAlive = bool.Parse(packet.ContainsKey("alive").ToString());
+                //    if (!isCharAlive && player.ActiveHealthController.IsAlive)
+                //    {
+                //        player.ActiveHealthController.Kill(Player_ApplyDamageInfo_Patch.LastDamageTypes.ContainsKey(packet["profileId"].ToString()) ? Player_ApplyDamageInfo_Patch.LastDamageTypes[packet["profileId"].ToString()] : EDamageType.Undefined);
+                //    }
+                //}
 
                 if (packet.ContainsKey("hp.Chest") && packet.ContainsKey("en") && packet.ContainsKey("hy"))
                 {

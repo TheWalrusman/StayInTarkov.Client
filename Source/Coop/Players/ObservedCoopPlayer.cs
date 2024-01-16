@@ -1,7 +1,6 @@
 ﻿using Comfort.Common;
 using EFT;
 using EFT.HealthSystem;
-using EFT.Interactive;
 using EFT.InventoryLogic;
 using StayInTarkov.Coop.Controllers;
 using StayInTarkov.Coop.Matchmaker;
@@ -105,6 +104,26 @@ namespace StayInTarkov.Coop.Players
             //base.OnWeaponMastered(masterSkill);
         }
 
+        public override void StartInflictSelfDamageCoroutine()
+        {
+            // Do nothing
+        }
+
+        public override void AddStateSpeedLimit(float speedDelta, ESpeedLimit cause)
+        {
+            // Do nothing
+        }
+
+        public override void UpdateSpeedLimit(float speedDelta, ESpeedLimit cause)
+        {
+            // Do nothing
+        }
+
+        public override void UpdateSpeedLimitByHealth()
+        {
+            // Do nothing
+        }
+
         public override void ApplyDamageInfo(DamageInfo damageInfo, EBodyPart bodyPartType, float absorbed, EHeadSegment? headSegment = null)
         {
             // TODO: Try to run all of this locally so we do not rely on the server / fight lag
@@ -112,10 +131,10 @@ namespace StayInTarkov.Coop.Players
             // TODO: Do this on ApplyShot instead, and check if instigator is local
             // Also do check if it's a server and shooter is AI
 
-            if (damageInfo.Player == null || !damageInfo.Player.iPlayer.IsYourPlayer)
-                return;
+            if (damageInfo.Player == null)
+                return;            
 
-            if (!IsObservedAI)
+            if (!IsObservedAI || !damageInfo.Player.iPlayer.IsYourPlayer)
                 return;
 
             if (damageInfo.DamageType.IsWeaponInduced())
@@ -131,20 +150,41 @@ namespace StayInTarkov.Coop.Players
                 };
                 HealthPacket.ToggleSend();
 
-                base.ApplyDamageInfo(damageInfo, bodyPartType, absorbed, headSegment); 
+                base.ApplyDamageInfo(damageInfo, bodyPartType, absorbed, headSegment);
             }
         }
 
         public override PlayerHitInfo ApplyShot(DamageInfo damageInfo, EBodyPart bodyPartType, ShotId shotId)
         {
-            if (damageInfo.Player != null && damageInfo.Player.iPlayer.IsYourPlayer)
+            if (damageInfo.Player != null)
             {
-                return base.ApplyShot(damageInfo, bodyPartType, shotId); 
+                LastAggressor = Singleton<GameWorld>.Instance.GetAlivePlayerByProfileID(damageInfo.Player.iPlayer.ProfileId);
+                LastDamageInfo = damageInfo;
+
+                if (damageInfo.Player.iPlayer.IsYourPlayer)
+                {
+                    return base.ApplyShot(damageInfo, bodyPartType, shotId);
+                }
+                return null;
             }
             else
             {
                 return null;
             }
+        }
+
+        public override void OnHealthEffectAdded(IEffect effect)
+        {
+            if (effect is IEffect7 && FractureSound != null && Singleton<BetterAudio>.Instantiated)
+            {
+                Singleton<BetterAudio>.Instance.PlayAtPoint(Position, FractureSound, FPSCamera.Instance.Distance(Position),
+                    BetterAudio.AudioSourceGroupType.Impacts, 15, 0.7f, EOcclusionTest.Fast, null, false);
+            }
+        }
+
+        public override void OnHealthEffectRemoved(IEffect effect)
+        {
+            // Do nothing
         }
 
         protected override void Interpolate()
@@ -206,6 +246,8 @@ namespace StayInTarkov.Coop.Players
                 }
                 Vector3 a = Vector3.Lerp(MovementContext.TransformPosition, NewState.Position, InterpolationRatio);
                 CharacterController.Move(a - MovementContext.TransformPosition, InterpolationRatio);
+
+                MovementContext.ResetFlying();
 
                 LastState = NewState;
             }
@@ -292,7 +334,7 @@ namespace StayInTarkov.Coop.Players
                 MovementContext.MovementDirection, CurrentManagedState.Name, MovementContext.Tilt,
                 MovementContext.Step, CurrentAnimatorStateIndex, MovementContext.SmoothedCharacterMovementSpeed,
                 IsInPronePose, PoseLevel, MovementContext.IsSprintEnabled, Physical.SerializationStruct, InputDirection,
-                MovementContext.BlindFire, MovementContext.ActualLinearSpeed);            
+                MovementContext.BlindFire, MovementContext.ActualLinearSpeed);
 
             if (MatchmakerAcceptPatches.IsClient)
                 StartCoroutine(SendStatePacket());
@@ -300,7 +342,7 @@ namespace StayInTarkov.Coop.Players
             if (IsObservedAI) // Prevents AI from dying to fall damage
             {
                 ActiveHealthController.SetDamageCoeff(0);
-                StartCoroutine(SpawnObservedBot()); 
+                StartCoroutine(SpawnObservedBot());
             }
             else
             {

@@ -13,7 +13,13 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using UnityEngine;
+using Open.Nat;
 using static StayInTarkov.Networking.SITSerialization;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Reflection;
+using EFT.UI;
+using UnityEngine.UIElements;
 
 /* 
 * This code has been written by Lacyway (https://github.com/Lacyway) for the SIT Project (https://github.com/stayintarkov/StayInTarkov.Client). 
@@ -30,6 +36,8 @@ namespace StayInTarkov.Networking
         public CoopPlayer MyPlayer => Singleton<GameWorld>.Instance.MainPlayer as CoopPlayer;
         public ConcurrentDictionary<string, CoopPlayer> Players => CoopGameComponent.Players;
         public List<string> PlayersMissing = [];
+        public string MyExternalIP { get; private set; }
+        private int Port => PluginConfigSettings.Instance.CoopSettings.SITGamePlayPort;
         private CoopGameComponent CoopGameComponent { get; set; }
         public LiteNetLib.NetManager NetServer
         {
@@ -39,7 +47,7 @@ namespace StayInTarkov.Networking
             }
         }
 
-        public void Start()
+        public async void Start()
         {
             NetDebug.Logger = this;
 
@@ -65,11 +73,59 @@ namespace StayInTarkov.Networking
                 IPv6Enabled = false
             };
 
-            _netServer.Start(PluginConfigSettings.Instance.CoopSettings.SITGamePlayPort);
+            if (PluginConfigSettings.Instance.CoopSettings.UseUPnP)
+            {
+                bool upnpFailed = false;
 
-            EFT.UI.ConsoleScreen.Log("Started SITServer");
+                await Task.Run(async () =>
+                {
+                    try
+                    {
+                        var discoverer = new NatDiscoverer();
+                        var cts = new CancellationTokenSource(10000);
+                        var device = await discoverer.DiscoverDeviceAsync(PortMapper.Upnp, cts);
+                        var extIp = await device.GetExternalIPAsync();
+                        MyExternalIP = extIp.MapToIPv4().ToString();
+
+                        await device.CreatePortMapAsync(new Mapping(Protocol.Udp, Port, Port, 300, "SIT UDP"));
+                    }
+                    catch (System.Exception ex)
+                    {
+                        ConsoleScreen.LogError($"Error when attempting to map UPnP. Make sure the selected port is not already open! Error message: {ex.Message}");
+                        upnpFailed = true;
+                    }
+                });
+
+                if (upnpFailed)
+                    Singleton<PreloaderUI>.Instance.ShowErrorScreen("Network Error", "UPnP mapping failed. Make sure the selected port is not already open!"); 
+            }
+
+            _netServer.Start(Port);
+
+            ConsoleScreen.Log("Started SITServer");
             NotificationManagerClass.DisplayMessageNotification($"Server started on port {_netServer.LocalPort}.",
                 EFT.Communications.ENotificationDurationType.Default, EFT.Communications.ENotificationIconType.EntryPoint);
+
+            Dictionary<string, object> packet = new()
+            {
+                {
+                    "m",
+                    "SetIpAndPort"
+                },
+                {
+                    "serverId",
+                    CoopGameComponent.GetServerId()
+                },
+                {
+                    "ip",
+                    MyExternalIP
+                },
+                {
+                    "port",
+                    Port.ToString()
+                }
+            };
+            AkiBackendCommunication.Instance.PostJson("/coop/server/update", packet.ToJson());
         }
 
         private void OnInformationPacketReceived(InformationPacket packet, NetPeer peer)
@@ -112,14 +168,14 @@ namespace StayInTarkov.Networking
             if (!Players.ContainsKey(packet.ProfileId) && !PlayersMissing.Contains(packet.ProfileId))
             {
                 PlayersMissing.Add(packet.ProfileId);
-                EFT.UI.ConsoleScreen.Log($"Requesting missing player from server.");
+                ConsoleScreen.Log($"Requesting missing player from server.");
                 AllCharacterRequestPacket requestPacket = new(MyPlayer.ProfileId);
                 _dataWriter.Reset();
                 SendDataToPeer(peer, _dataWriter, ref requestPacket, DeliveryMethod.ReliableUnordered);
             }
             if (!packet.IsRequest && PlayersMissing.Contains(packet.ProfileId))
             {
-                EFT.UI.ConsoleScreen.Log($"Received CharacterRequest from client: ProfileID: {packet.PlayerInfo.Profile.ProfileId}, Nickname: {packet.PlayerInfo.Profile.Nickname}");
+                ConsoleScreen.Log($"Received CharacterRequest from client: ProfileID: {packet.PlayerInfo.Profile.ProfileId}, Nickname: {packet.PlayerInfo.Profile.Nickname}");
                 if (packet.ProfileId != MyPlayer.ProfileId)
                 {
                     if (!CoopGameComponent.PlayersToSpawn.ContainsKey(packet.PlayerInfo.Profile.ProfileId))
@@ -231,7 +287,7 @@ namespace StayInTarkov.Networking
             }
             else
             {
-                EFT.UI.ConsoleScreen.Log("OnGameTimerPacketReceived: Game was null!");
+                ConsoleScreen.Log("OnGameTimerPacketReceived: Game was null!");
             }
         }
         private void OnPlayerStatePacketReceived(PlayerStatePacket packet, NetPeer peer)
@@ -252,6 +308,7 @@ namespace StayInTarkov.Networking
         public void Awake()
         {
             CoopGameComponent = CoopPatches.CoopGameComponentParent.GetComponent<CoopGameComponent>();
+            Singleton<SITServer>.Create(this);
         }
 
         void Update()
@@ -283,20 +340,20 @@ namespace StayInTarkov.Networking
 
         public void OnPeerConnected(NetPeer peer)
         {
-            NotificationManagerClass.DisplayMessageNotification($"Peer {peer.EndPoint} connected to server.",
+            NotificationManagerClass.DisplayMessageNotification($"Peer connected to server on port {peer.EndPoint.Port}.",
                 EFT.Communications.ENotificationDurationType.Default, EFT.Communications.ENotificationIconType.Friend);
         }
 
         public void OnNetworkError(IPEndPoint endPoint, SocketError socketErrorCode)
         {
-            EFT.UI.ConsoleScreen.Log("[SERVER] error " + socketErrorCode);
+            ConsoleScreen.Log("[SERVER] error " + socketErrorCode);
         }
 
         public void OnNetworkReceiveUnconnected(IPEndPoint remoteEndPoint, NetPacketReader reader, UnconnectedMessageType messageType)
         {
             if (messageType == UnconnectedMessageType.Broadcast)
             {
-                EFT.UI.ConsoleScreen.Log("[SERVER] Received discovery request. Send discovery response");
+                ConsoleScreen.Log("[SERVER] Received discovery request. Send discovery response");
                 NetDataWriter resp = new NetDataWriter();
                 resp.Put(1);
                 _netServer.SendUnconnectedMessage(resp, remoteEndPoint);
@@ -314,7 +371,7 @@ namespace StayInTarkov.Networking
 
         public void OnPeerDisconnected(NetPeer peer, LiteNetLib.DisconnectInfo disconnectInfo)
         {
-            EFT.UI.ConsoleScreen.Log("[SERVER] peer disconnected " + peer.EndPoint + ", info: " + disconnectInfo.Reason);
+            ConsoleScreen.Log("[SERVER] peer disconnected " + peer.EndPoint + ", info: " + disconnectInfo.Reason);
         }
 
         public void WriteNet(NetLogLevel level, string str, params object[] args)
