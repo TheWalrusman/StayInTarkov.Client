@@ -971,21 +971,21 @@ namespace StayInTarkov.Networking
             public bool HasKey { get; set; }
             public string KeyItemId { get; set; }
             public string KeyItemTemplateId { get; set; }
-            public GridItemAddressDescriptor GridItemAddressDescriptor { get; set; }
             public bool KeySuccess { get; set; }
 
             public static WorldInteractionPacket Deserialize(NetDataReader reader)
             {
-                WorldInteractionPacket packet = new();
-                packet.InteractiveId = reader.GetString();
-                packet.InteractionType = (EInteractionType)reader.GetInt();
-                packet.IsStart = reader.GetBool();
-                packet.HasKey = reader.GetBool();
+                WorldInteractionPacket packet = new()
+                {
+                    InteractiveId = reader.GetString(),
+                    InteractionType = (EInteractionType)reader.GetInt(),
+                    IsStart = reader.GetBool(),
+                    HasKey = reader.GetBool()
+                };
                 if (packet.HasKey)
                 {
                     packet.KeyItemId = reader.GetString();
                     packet.KeyItemTemplateId = reader.GetString();
-                    packet.GridItemAddressDescriptor = AddressUtils.DeserializeGridItemAddressDescriptor(reader);
                     packet.KeySuccess = reader.GetBool();
                 }
                 return packet;
@@ -1001,7 +1001,6 @@ namespace StayInTarkov.Networking
                 {
                     writer.Put(packet.KeyItemId);
                     writer.Put(packet.KeyItemTemplateId);
-                    AddressUtils.SerializeGridItemAddressDescriptor(writer, packet.GridItemAddressDescriptor);
                     writer.Put(packet.KeySuccess);
                 }
             }

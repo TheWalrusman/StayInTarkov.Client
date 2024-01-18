@@ -105,7 +105,7 @@ namespace StayInTarkov.Networking
                 {
                     var discoverer = new NatDiscoverer();
                     var cts = new CancellationTokenSource(10000);
-                    var device = await discoverer.DiscoverDeviceAsync(PortMapper.Upnp, cts);
+                    var device = await discoverer.DiscoverDeviceAsync();
                     var extIp = await device.GetExternalIPAsync();
                     MyExternalIP = extIp.MapToIPv4().ToString();
                 }

@@ -32,7 +32,7 @@ namespace StayInTarkov.Coop
     public class CoopGameComponent : MonoBehaviour
     {
         #region Fields/Properties        
-        public WorldInteractiveObject[] ListOfInteractiveObjects { get; set; }
+        public Dictionary<string, WorldInteractiveObject> ListOfInteractiveObjects { get; private set; } = [];
         private AkiBackendCommunication RequestingObj { get; set; }
         public SITConfig SITConfig { get; private set; } = new SITConfig();
         public string ServerId { get; set; } = null;
@@ -228,7 +228,11 @@ namespace StayInTarkov.Coop
             _ = Task.Run(() => PeriodicEnableDisableGC());
 
             // Get a List of Interactive Objects (this is a slow method), so run once here to maintain a reference
-            ListOfInteractiveObjects = FindObjectsOfType<WorldInteractiveObject>();
+            WorldInteractiveObject[] interactiveObjects = FindObjectsOfType<WorldInteractiveObject>();
+            foreach (WorldInteractiveObject interactiveObject in interactiveObjects)
+            {
+                ListOfInteractiveObjects.Add(interactiveObject.Id, interactiveObject);
+            }
 
             // Enable the Coop Patches
             CoopPatches.EnableDisablePatches();
@@ -622,12 +626,26 @@ namespace StayInTarkov.Coop
 
         private void ReadFromServerCharacters()
         {
+            //AllCharacterRequestPacket requestPacket = new(profileId: MyPlayer.ProfileId)
+            //{
+            //    CharactersAmount = Players.Count + queuedProfileIds.Count,
+            //};
+            //requestPacket.Characters = new string[requestPacket.CharactersAmount];
+            //for (int i = 0; i < Players.Count; i++)
+            //{
+            //    requestPacket.Characters[i] = Players.ElementAt(i).Key;
+            //}
+            //for (int i = 0; i < queuedProfileIds.Count; i++)
+            //{
+            //    requestPacket.Characters[i] = Players.ElementAt(i).Key;
+            //}
+            //MyPlayer.Client.SendData(MyPlayer.Writer, ref requestPacket, LiteNetLib.DeliveryMethod.ReliableOrdered);
             AllCharacterRequestPacket requestPacket = new(profileId: MyPlayer.ProfileId)
             {
-                CharactersAmount = Players.Count()
+                CharactersAmount = Players.Count
             };
             requestPacket.Characters = new string[requestPacket.CharactersAmount];
-            for (int i = 0; i < requestPacket.CharactersAmount; i++)
+            for (int i = 0; i < Players.Count; i++)
             {
                 requestPacket.Characters[i] = Players.ElementAt(i).Key;
             }
@@ -739,7 +757,6 @@ namespace StayInTarkov.Coop
             {
                 //Create corpse instead?
                 otherPlayer.ActiveHealthController.Kill(EDamageType.Undefined);
-                otherPlayer.OnDead(EDamageType.Undefined);
             }
 
             queuedProfileIds.Remove(spawnObject.Profile.ProfileId);
@@ -765,7 +782,7 @@ namespace StayInTarkov.Coop
                 }
                 else
                 {
-                    yield return new WaitForSeconds(2);
+                    yield return new WaitForSeconds(1);
                 }
             }
         }
@@ -1349,9 +1366,10 @@ namespace StayInTarkov.Coop
                         labelOpacity = distanceToCenter / 100;
                     }
 
-                    if (ownPlayer.HandsController.IsAiming)
+                    if (ownPlayer.HandsController != null)
                     {
-                        labelOpacity *= 0.5f;
+                        if (ownPlayer.HandsController.IsAiming)
+                            labelOpacity *= 0.5f;
                     }
 
                     if (pl.HealthController.IsAlive)

@@ -1,5 +1,6 @@
 ﻿using BepInEx.Logging;
 using Comfort.Common;
+using Diz.LanguageExtensions;
 using EFT;
 using EFT.AssetsManager;
 using EFT.HealthSystem;
@@ -133,7 +134,7 @@ namespace StayInTarkov.Coop.Players
                     DamageType = damageInfo.DamageType,
                     BodyPartType = bodyPartType,
                     Absorbed = absorbed,
-                    //ProfileId = damageInfo.Player == null ? "null" : damageInfo.Player.iPlayer.ProfileId
+                    ProfileId = damageInfo.Player == null ? "null" : damageInfo.Player.iPlayer.ProfileId
                 };
                 HealthPacket.ToggleSend();
             }
@@ -306,7 +307,7 @@ namespace StayInTarkov.Coop.Players
 
         public void ClientApplyDamageInfo(DamageInfo damageInfo, EBodyPart bodyPartType, float absorbed, EHeadSegment? headSegment = null)
         {
-            base.ApplyDamageInfo(damageInfo, bodyPartType, absorbed, null);
+            base.ApplyDamageInfo(damageInfo, bodyPartType, absorbed, headSegment);
         }
 
         public override PlayerHitInfo ApplyShot(DamageInfo damageInfo, EBodyPart bodyPartType, ShotId shotId)
@@ -518,6 +519,254 @@ namespace StayInTarkov.Coop.Players
             }
         }
 
+        // Start
+        public override void vmethod_0(WorldInteractiveObject interactiveObject, InteractionResult interactionResult, Action callback)
+        {
+            base.vmethod_0(interactiveObject, interactionResult, callback);
+
+            bool isKey = false;
+            string keyItemId = "";
+            string keyItemTemplateId = "";
+            bool keySuccess = false;
+
+            if (interactionResult is KeyInteractionResult keyInteractionResult)
+            {
+                isKey = true;
+                KeyComponent key = keyInteractionResult.Key;
+
+                keyItemId = key.Item.Id;
+                keyItemTemplateId = key.Item.TemplateId;
+
+                if (key.Template.MaximumNumberOfUsage > 0 && key.NumberOfUsages + 1 >= key.Template.MaximumNumberOfUsage)
+                    callback();
+
+                keySuccess = keyInteractionResult.Succeed;
+            }
+
+            CommonPlayerPacket.HasWorldInteractionPacket = true;
+            if (isKey)
+            {
+                CommonPlayerPacket.WorldInteractionPacket = new()
+                {
+                    IsStart = true,
+                    InteractiveId = interactiveObject.Id,
+                    InteractionType = interactionResult.InteractionType,
+                    HasKey = true,
+                    KeyItemId = keyItemId,
+                    KeyItemTemplateId = keyItemTemplateId,
+                    KeySuccess = keySuccess
+                };
+            }
+            else
+            {
+                CommonPlayerPacket.WorldInteractionPacket = new()
+                {
+                    IsStart = true,
+                    InteractiveId = interactiveObject.Id,
+                    InteractionType = interactionResult.InteractionType,
+                    HasKey = false
+                };
+            }
+            CommonPlayerPacket.ToggleSend();
+        }
+
+        // Execute
+        public override void vmethod_1(WorldInteractiveObject door, InteractionResult interactionResult)
+        {
+            base.vmethod_1(door, interactionResult);
+
+            bool isKey = false;
+            string keyItemId = "";
+            string keyItemTemplateId = "";
+            bool keySuccess = false;
+
+            if (interactionResult is KeyInteractionResult keyInteractionResult)
+            {
+                isKey = true;
+                KeyComponent key = keyInteractionResult.Key;
+
+                keyItemId = key.Item.Id;
+                keyItemTemplateId = key.Item.TemplateId;
+
+                keySuccess = keyInteractionResult.Succeed;
+            }
+
+            CommonPlayerPacket.HasWorldInteractionPacket = true;
+            if (isKey)
+            {
+                CommonPlayerPacket.WorldInteractionPacket = new()
+                {
+                    IsStart = true,
+                    InteractiveId = door.Id,
+                    InteractionType = interactionResult.InteractionType,
+                    HasKey = true,
+                    KeyItemId = keyItemId,
+                    KeyItemTemplateId = keyItemTemplateId,
+                    KeySuccess = keySuccess
+                };
+            }
+            else
+            {
+                CommonPlayerPacket.WorldInteractionPacket = new()
+                {
+                    IsStart = true,
+                    InteractiveId = door.Id,
+                    InteractionType = interactionResult.InteractionType,
+                    HasKey = false
+                };
+            }
+            CommonPlayerPacket.ToggleSend();
+        }
+
+        private void HandleInteractPacket(SITSerialization.WorldInteractionPacket packet)
+        {
+            // Fast forward check
+            Error canInteract = MovementContext.CanInteract;
+
+            if (canInteract != null)
+            {
+                EFT.UI.ConsoleScreen.LogWarning($"HandleInteractPacket: Hands are busy, fast forwarding. Reason: {canInteract}");
+                FastForwardCurrentOperations();
+            }
+
+            if (CoopGameComponent.TryGetCoopGameComponent(out CoopGameComponent coopGameComponent))
+            {
+                WorldInteractiveObject worldInteractiveObject = coopGameComponent.ListOfInteractiveObjects[packet.InteractiveId];
+
+                if (worldInteractiveObject != null || worldInteractiveObject.isActiveAndEnabled)
+                {
+                    InteractionResult interactionResult = new(packet.InteractionType);
+                    SOperationResult3<KeyInteractionResult> keyInteractionResult = new();
+
+                    if (packet.HasKey)
+                    {
+                        string itemId = packet.KeyItemId;
+                        Item item = null;
+
+                        var itemResult = FindItemById(itemId, true);
+                        if (itemResult.Error != null)
+                        {
+                            EFT.UI.ConsoleScreen.LogError("HandleInteractPacket: key was null, attempting to create instead.");
+                            item = Spawners.ItemFactory.CreateItem(itemId, packet.KeyItemTemplateId);
+                        }
+                        else
+                        {
+                            item = itemResult.Value;
+                        }
+
+                        if (item != null)
+                        {
+                            if (item.TryGetItemComponent(out KeyComponent keyComponent))
+                            {
+                                // TODO: This throws an error but doesn't stop gameplay, should look into it more.
+                                // GClass1136 UC
+                                keyInteractionResult = worldInteractiveObject.UnlockOperation(keyComponent, this);
+                                if (keyInteractionResult.Error != null)
+                                {
+                                    EFT.UI.ConsoleScreen.LogError($"HandleInteractPacket: KeyInteractionResult had errors. Error: {keyInteractionResult.Error}");
+                                }
+                                else
+                                {
+                                    keyInteractionResult.Value.RaiseEvents(_inventoryController, CommandStatus.Begin);
+                                }
+                            }
+                            else
+                            {
+                                Logger.LogError($"HandleInteractPacket: Packet contain KeyInteractionResult but item {itemId} is not a KeyComponent object.");
+                            }
+                        }
+                        else
+                        {
+                            Logger.LogError($"HandleInteractPacket: Packet contain KeyInteractionResult but item {itemId} is not found.");
+                        }
+                    }
+                    if (packet.IsStart && packet.InteractionType == EInteractionType.Unlock)
+                    {
+                        vmethod_0(worldInteractiveObject,
+                                    keyInteractionResult.Value ?? interactionResult,
+                                    keyInteractionResult.Value != null ? () => keyInteractionResult.Value.RaiseEvents(_inventoryController, CommandStatus.Succeed) : null);
+                        return;
+                    }
+                    if (packet.IsStart)
+                    {
+                        if (interactionResult.InteractionType == EInteractionType.Breach)
+                        {
+                            vmethod_0(worldInteractiveObject, interactionResult, null);
+                        }
+                        else
+                        {
+                            HandsController.Interact(true, worldInteractiveObject.DoorState == EDoorState.Open ? worldInteractiveObject.CloseID : worldInteractiveObject.PushID);
+                            worldInteractiveObject.Interact(interactionResult);
+                        }
+                        return;
+                        //if (worldInteractiveObject is Door door)
+                        //{
+                        //    if (interactionResult.InteractionType == EInteractionType.Breach)
+                        //    {
+                        //        vmethod_0(worldInteractiveObject, interactionResult, null);
+                        //    }
+                        //    else
+                        //    {
+                        //        HandsController.Interact(true, door.DoorState == EDoorState.Open ? door.CloseID : door.PushID);
+                        //        door.Interact(interactionResult);
+                        //    }
+                        //    return;
+                        //}
+                        //else
+                        //{
+                        //    HandsController.Loot(true);
+                        //    worldInteractiveObject.Interact(interactionResult);
+                        //    return;
+                        //}
+                    }
+                    if (packet.HasKey)
+                    {
+                        vmethod_1(worldInteractiveObject,
+                            keyInteractionResult.Value ?? interactionResult);
+                        return;
+                    }
+
+                    if (interactionResult.InteractionType == EInteractionType.Breach)
+                    {
+                        vmethod_0(worldInteractiveObject, interactionResult, null);
+                    }
+                    else
+                    {
+                        HandsController.Interact(true, worldInteractiveObject.DoorState == EDoorState.Open ? worldInteractiveObject.CloseID : worldInteractiveObject.PushID);
+                        worldInteractiveObject.Interact(interactionResult);
+                    }
+                    return;
+                    //if (worldInteractiveObject is Door door)
+                    //{
+                    //    if (interactionResult.InteractionType == EInteractionType.Breach)
+                    //    {
+                    //        vmethod_0(worldInteractiveObject, interactionResult, null);
+                    //    }
+                    //    else
+                    //    {
+                    //        HandsController.Interact(true, door.DoorState == EDoorState.Open ? door.CloseID : door.PushID);
+                    //        door.Interact(interactionResult);
+                    //    }
+                    //    return;
+                    //}
+                    //else
+                    //{
+                    //    HandsController.Loot(true);
+                    //    worldInteractiveObject.Interact(interactionResult);
+                    //    return;
+                    //}
+                }
+                else
+                {
+                    EFT.UI.ConsoleScreen.LogError("HandleInteractPacket: WorldInteractiveObject was null or disabled!");
+                }
+            }
+            else
+            {
+                EFT.UI.ConsoleScreen.LogError("HandleInteractPacket: CoopGameComponent was null!");
+            }
+        }
+
         public IEnumerator SyncWorld()
         {
             // TODO: Consolidate into one packet.
@@ -526,7 +775,6 @@ namespace StayInTarkov.Coop.Players
             {
                 yield return new WaitForSeconds(5f);
 
-                EFT.UI.ConsoleScreen.Log("Sending synchronization packets.");
                 Writer.Reset();
                 GameTimerPacket gameTimerPacket = new(true);
                 Client.SendData(Writer, ref gameTimerPacket, LiteNetLib.DeliveryMethod.ReliableOrdered);
@@ -614,83 +862,131 @@ namespace StayInTarkov.Coop.Players
 
             if (packet.HasWorldInteractionPacket)
             {
-                // TODO: Fix performance on the checker
-                // GClass1136.ProcessFrame
+                HandleInteractPacket(packet.WorldInteractionPacket);
+                //if (CoopGameComponent.TryGetCoopGameComponent(out CoopGameComponent coopGameComponent))
+                //{
+                //    WorldInteractiveObject worldInteractiveObject = coopGameComponent.ListOfInteractiveObjects[packet.WorldInteractionPacket.InteractiveId];
 
-                if (!CoopGameComponent.TryGetCoopGameComponent(out CoopGameComponent coopGameComponent))
-                {
-                    EFT.UI.ConsoleScreen.LogError("HandleCommonPacket::WorldInteractionPacket: CoopGameComponent was null!");
-                    goto SkipWorld;
-                }
+                //    if (worldInteractiveObject != null || worldInteractiveObject.isActiveAndEnabled)
+                //    {
+                //        InteractionResult interactionResult = new(packet.WorldInteractionPacket.InteractionType);
+                //        SOperationResult3<KeyInteractionResult> keyInteractionResult = new();
 
-                if (!ItemFinder.TryFindItemController(packet.ProfileId, out ItemController itemController))
-                {
-                    EFT.UI.ConsoleScreen.LogError("HandleCommonPacket::WorldInteractionPacket: ItemController was null!");
-                    goto SkipWorld;
-                }
+                //        if (packet.WorldInteractionPacket.HasKey)
+                //        {
+                //            string itemId = packet.WorldInteractionPacket.KeyItemId;
+                //            Item item = null;
 
-                WorldInteractiveObject worldInteractiveObject = coopGameComponent.ListOfInteractiveObjects.FirstOrDefault(x => x.Id == packet.WorldInteractionPacket.InteractiveId);
+                //            var itemResult = FindItemById(itemId, true);
+                //            if (itemResult.Error != null)
+                //            {
+                //                EFT.UI.ConsoleScreen.LogError("HandleCommonPacket::WorldInteractionPacket: key was null, attempting to create instead.");
+                //                item = Spawners.ItemFactory.CreateItem(itemId, packet.WorldInteractionPacket.KeyItemTemplateId);
+                //            }
+                //            else
+                //            {
+                //                item = itemResult.Value;
+                //            }
 
-                if (worldInteractiveObject == null || !worldInteractiveObject.isActiveAndEnabled)
-                {
-                    EFT.UI.ConsoleScreen.LogError("HandleCommonPacket::WorldInteractionPacket: WorldInteractiveObject was null or disabled!");
-                    goto SkipWorld;
-                }
+                //            if (item != null)
+                //            {
+                //                if (item.TryGetItemComponent(out KeyComponent keyComponent))
+                //                {
+                //                    // TODO: This throws an error but doesn't stop gameplay, should look into it more.
+                //                    // GClass1136 UC
+                //                    keyInteractionResult = worldInteractiveObject.UnlockOperation(keyComponent, this);
+                //                    if (keyInteractionResult.Error != null)
+                //                    {
+                //                        EFT.UI.ConsoleScreen.LogError($"HandleCommonPacket::WorldInteractionPacket: KeyInteractionResult had errors. Error: {keyInteractionResult.Error}");
+                //                    }
+                //                    else
+                //                    {
+                //                        keyInteractionResult.Value.RaiseEvents(_inventoryController, CommandStatus.Begin);
+                //                    }
+                //                }
+                //                else
+                //                {
+                //                    Logger.LogError($"HandleCommonPacket::WorldInteractionPacket: Packet contain KeyInteractionResult but item {itemId} is not a KeyComponent object.");
+                //                }
+                //            }
+                //            else
+                //            {
+                //                Logger.LogError($"HandleCommonPacket::WorldInteractionPacket: Packet contain KeyInteractionResult but item {itemId} is not found.");
+                //            }
+                //        }
+                //        if (packet.WorldInteractionPacket.IsStart && packet.WorldInteractionPacket.InteractionType == EInteractionType.Unlock)
+                //        {
+                //            //vmethod_0(worldInteractiveObject,
+                //            //            interactionResult,
+                //            //            keyInteractionResult.Value != null ? () => keyInteractionResult.Value.RaiseEvents(_inventoryController,
+                //            //            CommandStatus.Succeed) : () => keyInteractionResult.Value.RaiseEvents(_inventoryController, CommandStatus.Failed));
 
-                InteractionResult interactionResult = new(packet.WorldInteractionPacket.InteractionType);
-                KeyInteractionResult keyInteractionResult = null;
-
-                if (packet.WorldInteractionPacket.HasKey)
-                {
-                    string itemId = packet.WorldInteractionPacket.KeyItemId;
-                    if (!ItemFinder.TryFindItem(itemId, out Item item))
-                        item = Spawners.ItemFactory.CreateItem(itemId, packet.WorldInteractionPacket.KeyItemTemplateId);
-
-                    if (item != null)
-                    {
-                        if (item.TryGetItemComponent(out KeyComponent keyComponent))
-                        {
-                            DiscardResult discardResult = null;
-
-                            if (packet.WorldInteractionPacket.GridItemAddressDescriptor != null)
-                            {
-                                ItemAddress itemAddress = itemController.ToGridItemAddress(packet.WorldInteractionPacket.GridItemAddressDescriptor);
-                                discardResult = new DiscardResult(new RemoveResult(item, itemAddress, itemController, new ResizeResult(item, itemAddress,
-                                    ItemMovementHandler.ResizeAction.Addition, null, null), null, false), null, null, null);
-                            }
-
-                            keyInteractionResult = new KeyInteractionResult(keyComponent, discardResult, packet.WorldInteractionPacket.KeySuccess);
-                        }
-                        else
-                        {
-                            Logger.LogError($"HandleCommonPacket::WorldInteractionPacket: Packet contain KeyInteractionResult but item {itemId} is not a KeyComponent object.");
-                        }
-                    }
-                    else
-                    {
-                        Logger.LogError($"HandleCommonPacket::WorldInteractionPacket: Packet contain KeyInteractionResult but item {itemId} is not found.");
-                    }
-                }
-                if (packet.WorldInteractionPacket.IsStart)
-                {
-                    CurrentManagedState.StartDoorInteraction(worldInteractiveObject,
-                                keyInteractionResult ?? interactionResult,
-                                keyInteractionResult == null ? null : () => keyInteractionResult.RaiseEvents(itemController, CommandStatus.Failed));
-                }
-                else
-                {
-                    CurrentManagedState.ExecuteDoorInteraction(worldInteractiveObject,
-                        keyInteractionResult ?? interactionResult,
-                        keyInteractionResult == null ? null : () => keyInteractionResult.RaiseEvents(itemController, CommandStatus.Failed), this);
-                }
+                //            vmethod_0(worldInteractiveObject,
+                //                        keyInteractionResult.Value ?? interactionResult,
+                //                        () => keyInteractionResult.Value.RaiseEvents(_inventoryController, CommandStatus.Failed));
+                //        }
+                //        else if (packet.WorldInteractionPacket.IsStart)
+                //        {
+                //            //vmethod_0(worldInteractiveObject, interactionResult, null);
+                //            if (worldInteractiveObject is Door door)
+                //            {
+                //                if (interactionResult.InteractionType == EInteractionType.Breach)
+                //                {
+                //                    vmethod_0(worldInteractiveObject, interactionResult, null);
+                //                }
+                //                else
+                //                {
+                //                    HandsController.Interact(true, door.DoorState == EDoorState.Open ? door.CloseID : door.PushID);
+                //                    door.Interact(interactionResult);
+                //                }
+                //            }
+                //            else
+                //            {
+                //                HandsController.Loot(true);
+                //                worldInteractiveObject.Interact(interactionResult);
+                //            }
+                //        }
+                //        else if (packet.WorldInteractionPacket.HasKey)
+                //        {
+                //            vmethod_1(worldInteractiveObject,
+                //                keyInteractionResult.Value ?? interactionResult);
+                //        }
+                //        else
+                //        {
+                //            if (worldInteractiveObject is Door door)
+                //            {
+                //                if (interactionResult.InteractionType == EInteractionType.Breach || interactionResult.InteractionType == EInteractionType.Unlock)
+                //                {
+                //                    vmethod_0(worldInteractiveObject, interactionResult, null);
+                //                }
+                //                else
+                //                {
+                //                    HandsController.Interact(true, door.DoorState == EDoorState.Open ? door.CloseID : door.PushID);
+                //                    door.Interact(interactionResult);
+                //                }
+                //            }
+                //            else
+                //            {
+                //                HandsController.Loot(true);
+                //                worldInteractiveObject.Interact(interactionResult);
+                //            }
+                //        }
+                //    }
+                //    else
+                //    {
+                //        EFT.UI.ConsoleScreen.LogError("HandleCommonPacket::WorldInteractionPacket: WorldInteractiveObject was null or disabled!");
+                //    }                    
+                //}
+                //else
+                //{
+                //    EFT.UI.ConsoleScreen.LogError("HandleCommonPacket::WorldInteractionPacket: CoopGameComponent was null!");
+                //}
             }
-
-        SkipWorld:
 
             if (packet.HasContainerInteractionPacket)
             {
                 CoopGameComponent coopGameComponent = CoopGameComponent.GetCoopGameComponent();
-                LootableContainer lootableContainer = coopGameComponent.ListOfInteractiveObjects.FirstOrDefault(x => x.Id == packet.ContainerInteractionPacket.InteractiveId) as LootableContainer;
+                LootableContainer lootableContainer = coopGameComponent.ListOfInteractiveObjects[packet.ContainerInteractionPacket.InteractiveId] as LootableContainer;
 
                 if (lootableContainer != null && lootableContainer.isActiveAndEnabled)
                 {
@@ -713,12 +1009,15 @@ namespace StayInTarkov.Coop.Players
                             break;
                     }
 
-                    void Interact() => ReflectionHelpers.InvokeMethodForObject(lootableContainer, methodName);
+                    if (!string.IsNullOrEmpty(methodName))
+                    {
+                        void Interact() => ReflectionHelpers.InvokeMethodForObject(lootableContainer, methodName);
 
-                    if (packet.ContainerInteractionPacket.InteractionType == EInteractionType.Unlock)
-                        Interact();
-                    else
-                        lootableContainer.StartBehaviourTimer(EFTHardSettings.Instance.DelayToOpenContainer, Interact);
+                        if (packet.ContainerInteractionPacket.InteractionType == EInteractionType.Unlock)
+                            Interact();
+                        else
+                            lootableContainer.StartBehaviourTimer(EFTHardSettings.Instance.DelayToOpenContainer, Interact); 
+                    }
                 }
                 else
                 {
@@ -732,13 +1031,11 @@ namespace StayInTarkov.Coop.Players
                 {
                     case SITSerialization.EProceedType.EmptyHands:
                         {
-                            EFT.UI.ConsoleScreen.Log("ProceedPacket was: EmptyHands");
                             base.Proceed(false, null, packet.ProceedPacket.Scheduled);
                             break;
                         }
                     case SITSerialization.EProceedType.FoodDrink:
                         {
-                            EFT.UI.ConsoleScreen.Log("ProceedPacket was: FoodDrink");
                             if (ItemFinder.TryFindItem(packet.ProceedPacket.ItemId, out Item item))
                             {
                                 if (item is FoodDrink foodDrink)
@@ -758,7 +1055,6 @@ namespace StayInTarkov.Coop.Players
                         }
                     case SITSerialization.EProceedType.ThrowWeap:
                         {
-                            EFT.UI.ConsoleScreen.Log("ProceedPacket was: ThrowWeap");
                             if (ItemFinder.TryFindItem(packet.ProceedPacket.ItemId, out Item item))
                             {
                                 if (item is ThrowWeap throwWeap)
@@ -778,7 +1074,6 @@ namespace StayInTarkov.Coop.Players
                         }
                     case SITSerialization.EProceedType.Meds:
                         {
-                            EFT.UI.ConsoleScreen.Log("ProceedPacket was: Meds");
                             if (ItemFinder.TryFindItem(packet.ProceedPacket.ItemId, out Item item))
                             {
                                 if (item is Meds meds)
@@ -798,7 +1093,6 @@ namespace StayInTarkov.Coop.Players
                         }
                     case SITSerialization.EProceedType.QuickGrenadeThrow:
                         {
-                            EFT.UI.ConsoleScreen.Log("ProceedPacket was: QuickGrenadeThrow");
                             if (ItemFinder.TryFindItem(packet.ProceedPacket.ItemId, out Item item))
                             {
                                 if (item is ThrowWeap throwWeap)
@@ -818,7 +1112,6 @@ namespace StayInTarkov.Coop.Players
                         }
                     case SITSerialization.EProceedType.QuickKnifeKick:
                         {
-                            EFT.UI.ConsoleScreen.Log("ProceedPacket was: QuickKnifeKick");
                             if (ItemFinder.TryFindItem(packet.ProceedPacket.ItemId, out Item item))
                             {
                                 if (item.TryGetItemComponent(out KnifeComponent knifeComponent))
@@ -838,7 +1131,6 @@ namespace StayInTarkov.Coop.Players
                         }
                     case SITSerialization.EProceedType.QuickUse:
                         {
-                            EFT.UI.ConsoleScreen.Log("ProceedPacket was: QuickUse");
                             if (ItemFinder.TryFindItem(packet.ProceedPacket.ItemId, out Item item))
                             {
                                 base.Proceed(item, null, packet.ProceedPacket.Scheduled);
@@ -851,7 +1143,6 @@ namespace StayInTarkov.Coop.Players
                         }
                     case SITSerialization.EProceedType.Weapon:
                         {
-                            EFT.UI.ConsoleScreen.Log("ProceedPacket was: Weapon");
                             if (ItemFinder.TryFindItem(packet.ProceedPacket.ItemId, out Item item))
                             {
                                 if (item is Weapon weapon)
@@ -871,7 +1162,6 @@ namespace StayInTarkov.Coop.Players
                         }
                     case SITSerialization.EProceedType.Knife:
                         {
-                            EFT.UI.ConsoleScreen.Log("ProceedPacket was: Knife");
                             if (ItemFinder.TryFindItem(packet.ProceedPacket.ItemId, out Item item))
                             {
                                 if (item.TryGetItemComponent(out KnifeComponent knifeComponent))
@@ -891,7 +1181,6 @@ namespace StayInTarkov.Coop.Players
                         }
                     case SITSerialization.EProceedType.TryProceed:
                         {
-                            EFT.UI.ConsoleScreen.Log("ProceedPacket was: TryProceed");
                             if (ItemFinder.TryFindItem(packet.ProceedPacket.ItemId, out Item item))
                             {
                                 TryProceed(item, null, packet.ProceedPacket.Scheduled);
@@ -944,7 +1233,7 @@ namespace StayInTarkov.Coop.Players
                 HealthPacket.ObservedDeathPacket = new()
                 {
                     DamageType = damageType,
-                    ProfileId = (LastDamageInfo.Player != null && LastDamageInfo.Player.iPlayer != null) ? LastDamageInfo.Player.iPlayer.ProfileId : "null"
+                    //ProfileId = (LastDamageInfo.Player != null && LastDamageInfo.Player.iPlayer != null) ? LastDamageInfo.Player.iPlayer.ProfileId : "null"
                 };
                 HealthPacket.ToggleSend();
             }
@@ -1104,7 +1393,6 @@ namespace StayInTarkov.Coop.Players
                         }
 
                         firearmController.Weapon.MalfState.MalfunctionedAmmo = (BulletClass)Singleton<ItemFactory>.Instance.CreateItem(MongoID.Generate(), packet.ShotInfoPacket.AmmoTemplate, null);
-                        //WeaponPrefab weaponPrefab = ReflectionHelpers.GetFieldOrPropertyFromInstance<WeaponPrefab>(firearmController, "asd");
                         WeaponPrefab weaponPrefab = firearmController.ControllerGameObject.GetComponent<WeaponPrefab>();
                         if (weaponPrefab != null)
                         {
@@ -1140,12 +1428,29 @@ namespace StayInTarkov.Coop.Players
                         if (firearmController.Weapon.HasChambers)
                         {
                             firearmController.Weapon.Chambers[0].RemoveItem(false);
+
                             if (firearmController.Weapon.BoltAction)
                             {
                                 firearmController.FirearmsAnimator.SetBoltActionReload(true);
                                 firearmController.FirearmsAnimator.SetFire(true);
                                 StartCoroutine(ObservedBoltAction(firearmController.FirearmsAnimator));
                             }
+
+                            if (firearmController.Weapon is GWeapon5 cylinderWeapon)
+                            {
+                                if (cylinderWeapon.GetCurrentMagazine() is CylinderMagazine cylinderMagazine)
+                                {
+                                    BulletClass cylinderAmmo = cylinderMagazine.GetFirstAmmo(false);
+                                    if (cylinderAmmo != null)
+                                    {
+                                        cylinderMagazine.RemoveAmmoInCamora(cylinderAmmo, _inventoryController);
+                                        firearmController.FirearmsAnimator.SetAmmoOnMag(cylinderMagazine.Count);
+                                    }
+                                    cylinderMagazine.IncrementCamoraIndex();
+                                    firearmController.FirearmsAnimator.SetCamoraIndex(cylinderMagazine.CurrentCamoraIndex);
+                                }
+                            }
+
                             WeaponEffectsManager weaponEffectsManager = firearmController.ControllerGameObject.GetComponent<WeaponPrefab>().ObjectInHands as WeaponEffectsManager;
                             if (weaponEffectsManager != null)
                             {
@@ -1164,7 +1469,7 @@ namespace StayInTarkov.Coop.Players
 
                         ammo.IsUsed = true;
 
-                        if (magazine != null && !firearmController.Weapon.BoltAction)
+                        if (magazine != null && magazine is not CylinderMagazine && !firearmController.Weapon.BoltAction)
                         {
                             magazine.Cartridges.PopTo(_inventoryController, new SlotItemAddress(firearmController.Item.Chambers[0]));
                         }
@@ -1185,17 +1490,6 @@ namespace StayInTarkov.Coop.Players
 
                 if (packet.ExamineWeapon)
                 {
-                    //Weapon weapon = firearmController.Weapon;
-                    //if (firearmController.Malfunction == true && weapon.MalfState.State != Weapon.EMalfunctionState.None)
-                    //{
-                    //    // GClass2623_0 = InventoryController
-                    //    firearmController.FirearmsAnimator.MisfireSlideUnknown(false);
-                    //    GClass2623_0.ExamineMalfunction(weapon);
-                    //}
-                    //else
-                    //{
-                    //    firearmController.ExamineWeapon();
-                    //}
                     firearmController.ExamineWeapon();
                 }
 
@@ -1443,6 +1737,23 @@ namespace StayInTarkov.Coop.Players
                     Damage = packet.ApplyDamageInfo.Damage,
                     DamageType = packet.ApplyDamageInfo.DamageType
                 };
+
+                if (packet.ApplyDamageInfo.ProfileId != "null")
+                {
+                    var player = Singleton<GameWorld>.Instance.GetAlivePlayerBridgeByProfileID(packet.ApplyDamageInfo.ProfileId);
+
+                    if (player != null)
+                    {
+                        damageInfo.Player = player;
+                    }
+
+                    if (Singleton<GameWorld>.Instance.GetAlivePlayerByProfileID(packet.ApplyDamageInfo.ProfileId).HandsController.Item is Weapon weapon)
+                    {
+                        damageInfo.Weapon = weapon;
+                    }
+                    // TODO: Add weapon info
+                }
+
                 ClientApplyDamageInfo(damageInfo, packet.ApplyDamageInfo.BodyPartType, packet.ApplyDamageInfo.Absorbed);
             }
 

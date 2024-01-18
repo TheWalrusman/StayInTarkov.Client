@@ -128,16 +128,16 @@ namespace StayInTarkov.Coop
 
             // Non Waves Scenario setup
             coopGame.nonWavesSpawnScenario_0 = (NonWavesSpawnScenario)ReflectionHelpers.GetMethodForType(typeof(NonWavesSpawnScenario), "smethod_0").Invoke
-                (null, new object[] { coopGame, location, coopGame.PBotsController });
+                (null, [coopGame, location, coopGame.PBotsController]);
             coopGame.nonWavesSpawnScenario_0.ImplementWaveSettings(wavesSettings);
 
             // Waves Scenario setup
             coopGame.wavesSpawnScenario_0 = (WavesSpawnScenario)ReflectionHelpers.GetMethodForType(typeof(WavesSpawnScenario), "smethod_0").Invoke
-                (null, new object[] {
+                (null, [
                     coopGame.gameObject
                     , location.waves
                     , new Action<BotSpawnWave>((wave) => coopGame.PBotsController.ActivateBotsByWave(wave))
-                    , location });
+                    , location ]);
 
             var bosswavemanagerValue = ReflectionHelpers.GetMethodForType(typeof(BossWaveManager), "smethod_0").Invoke
                 (null, new object[] { location.BossLocationSpawn, new Action<BossLocationSpawn>((bossWave) => { coopGame.PBotsController.ActivateBotsByWave(bossWave); }) });
@@ -492,7 +492,7 @@ namespace StayInTarkov.Coop
                                 {
                                     if (numbersOfPlayersToWaitFor > 0)
                                     {
-                                        MatchmakerAcceptPatches.TimeHasComeScreenController.ChangeStatus($"Waiting for {numbersOfPlayersToWaitFor} Player(s)", progress);
+                                        MatchmakerAcceptPatches.TimeHasComeScreenController.ChangeStatus($"Waiting for {numbersOfPlayersToWaitFor} player(s)", progress);
                                     }
                                     else
                                     {
@@ -505,6 +505,38 @@ namespace StayInTarkov.Coop
                     }
                     else if (MatchmakerAcceptPatches.IsClient)
                     {
+                        while (!Singleton<SITClient>.Instantiated)
+                            await Task.Delay(1000);
+
+                        SITClient client = Singleton<SITClient>.Instance;
+
+                        int connectionAttempts = 0;
+
+                        while (client.NetClient == null)
+                            await Task.Delay(500);
+
+                        //while (client.NetClient.FirstPeer.ConnectionState != LiteNetLib.ConnectionState.Any && connectionAttempts < 5)
+                        //{
+                        //    if (client.NetClient.FirstPeer.ConnectionState != LiteNetLib.ConnectionState.Any)
+                        //        await Task.Delay(2000); // Give it a second go to prevent Unity Crash
+
+                        //    if (client.NetClient.FirstPeer.ConnectionState != LiteNetLib.ConnectionState.Any)
+                        //    {
+                        //        client.NetClient.Connect(client.IP, client.Port, "sit.core");
+                        //        connectionAttempts++;
+
+                        //        NotificationManagerClass.DisplayMessageNotification($"Unable to connect, retrying. Attempt {connectionAttempts}/5.",
+                        //        EFT.Communications.ENotificationDurationType.Default, EFT.Communications.ENotificationIconType.Alert);
+
+                        //        await Task.Delay(2500); 
+                        //    }
+                        //}
+
+                        //if (client.NetClient.NotConnected)
+                        //{
+                        //    Singleton<PreloaderUI>.Instance.ShowErrorScreen("Network Error", "Unable to connect to the server. Exceeded max attempts of 5! Make sure ports are forwarded and/or UPnP is enabled and supported.");
+                        //}
+                            
                         while (coopGameComponent.MyPlayer.Client == null)
                             await Task.Delay(1000);
 
@@ -521,7 +553,7 @@ namespace StayInTarkov.Coop
                                 {
                                     if (numbersOfPlayersToWaitFor > 0)
                                     {
-                                        MatchmakerAcceptPatches.TimeHasComeScreenController.ChangeStatus($"Waiting for {numbersOfPlayersToWaitFor} Player(s)", progress);
+                                        MatchmakerAcceptPatches.TimeHasComeScreenController.ChangeStatus($"Waiting for {numbersOfPlayersToWaitFor} player(s)", progress);
                                     }
                                     else
                                     {
@@ -625,28 +657,16 @@ namespace StayInTarkov.Coop
 
             var nonwaves = (WaveInfo[])ReflectionHelpers.GetFieldFromTypeByFieldType(nonWavesSpawnScenario_0.GetType(), typeof(WaveInfo[])).GetValue(nonWavesSpawnScenario_0);
 
-            LocalGameBotCreator profileCreator =
-                new(BackEndSession
-                , wavesSpawnScenario_0.SpawnWaves
-                , Location_0.BossLocationSpawn
-                , nonwaves
-                , true);
+            LocalGameBotCreator profileCreator = new(BackEndSession, wavesSpawnScenario_0.SpawnWaves, Location_0.BossLocationSpawn, nonwaves, true);
 
             BotCreator botCreator = new(this, profileCreator, CreatePhysicalBot);
             BotZone[] botZones = LocationScene.GetAllObjects<BotZone>(false).ToArray();
-            PBotsController.Init(this
-                , botCreator
-                , botZones
-                , spawnSystem
-                , wavesSpawnScenario_0.BotLocationModifier
-                , controllerSettings.IsEnabled && controllerSettings.BotAmount != EBotAmount.NoBots
-                , false // controllerSettings.IsScavWars
-                , true
-                , false
-                , false
-                , Singleton<GameWorld>.Instance
-                , Location_0.OpenZones)
-                ;
+
+            // TODO: Set settings if they fail as client?
+
+            PBotsController.Init(this, botCreator, botZones, spawnSystem, wavesSpawnScenario_0.BotLocationModifier,
+                controllerSettings.IsEnabled && controllerSettings.BotAmount != EBotAmount.NoBots,
+                false, true, false, false, Singleton<GameWorld>.Instance, Location_0.OpenZones);
 
             Logger.LogInfo($"Location: {Location_0.Name}");
 
@@ -657,7 +677,7 @@ namespace StayInTarkov.Coop
                 EBotAmount.Medium => 12,
                 EBotAmount.High => 14,
                 EBotAmount.Horde => 15,
-                _ => 16,
+                _ => 16
             };
 
             int numberOfBots = shouldSpawnBots ? MaxBotCount : 0;

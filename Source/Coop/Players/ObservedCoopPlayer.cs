@@ -1,6 +1,7 @@
 ﻿using Comfort.Common;
 using EFT;
 using EFT.HealthSystem;
+using EFT.Interactive;
 using EFT.InventoryLogic;
 using StayInTarkov.Coop.Controllers;
 using StayInTarkov.Coop.Matchmaker;
@@ -124,6 +125,35 @@ namespace StayInTarkov.Coop.Players
             // Do nothing
         }
 
+        public override void ManageAggressor(DamageInfo damageInfo, EBodyPart bodyPart, EHeadSegment? headSegment)
+        {
+            if (_isDeadAlready)
+            {
+                return;
+            }
+            if (!HealthController.IsAlive)
+            {
+                _isDeadAlready = true;
+            }
+            EFT.Player player = (damageInfo.Player == null) ? null : Singleton<GameWorld>.Instance.GetAlivePlayerByProfileID(damageInfo.Player.iPlayer.ProfileId);
+            if (player == this)
+            {
+                return;
+            }
+            if (player == null)
+            {
+                return;
+            }
+            //if (player.Profile.Info.GroupId.EqualsAndNotNull(Profile.Info.GroupId))
+            //{
+            //    return;
+            //}
+            if (damageInfo.Weapon != null)
+            {
+                player.ExecuteShotSkill(damageInfo.Weapon);
+            }
+        }
+
         public override void ApplyDamageInfo(DamageInfo damageInfo, EBodyPart bodyPartType, float absorbed, EHeadSegment? headSegment = null)
         {
             // TODO: Try to run all of this locally so we do not rely on the server / fight lag
@@ -146,7 +176,7 @@ namespace StayInTarkov.Coop.Players
                     DamageType = damageInfo.DamageType,
                     BodyPartType = bodyPartType,
                     Absorbed = absorbed,
-                    //ProfileId = damageInfo.Player == null ? "null" : damageInfo.Player.iPlayer.ProfileId
+                    ProfileId = damageInfo.Player == null ? "null" : damageInfo.Player.iPlayer.ProfileId
                 };
                 HealthPacket.ToggleSend();
 
@@ -185,6 +215,18 @@ namespace StayInTarkov.Coop.Players
         public override void OnHealthEffectRemoved(IEffect effect)
         {
             // Do nothing
+        }
+
+        // Start
+        public override void vmethod_0(WorldInteractiveObject interactiveObject, InteractionResult interactionResult, Action callback)
+        {
+            base.vmethod_0(interactiveObject, interactionResult, callback);
+        }
+
+        // Execute
+        public override void vmethod_1(WorldInteractiveObject door, InteractionResult interactionResult)
+        {
+            base.vmethod_1(door, interactionResult);
         }
 
         protected override void Interpolate()

@@ -42,6 +42,9 @@ namespace StayInTarkov.Networking
             }
         }
 
+        public string IP {  get; private set; }
+        public int Port { get; private set; }
+
         public void Start()
         {
             _packetProcessor.RegisterNestedType(Vector3Utils.Serialize, Vector3Utils.Deserialize);
@@ -75,6 +78,9 @@ namespace StayInTarkov.Networking
             string ip = retrievedPacket["ip"].ToString();
             bool portFound = int.TryParse(retrievedPacket["port"].ToString(), out int port);
 
+            IP = ip;
+            Port = port;
+
             if (string.IsNullOrEmpty(ip) && !portFound)
             {
                 Singleton<PreloaderUI>.Instance.ShowErrorScreen("Network Error", "Unable to connect to the server. IP and/or Port was empty when requesting data!");
@@ -89,7 +95,7 @@ namespace StayInTarkov.Networking
         {
             if (!Singleton<SITAirdropsManager>.Instantiated)
             {
-                EFT.UI.ConsoleScreen.LogError("OnAirdropLootPacketReceived: Received loot package but manager is not instantiated!");
+                ConsoleScreen.LogError("OnAirdropLootPacketReceived: Received loot package but manager is not instantiated!");
                 return;
             }
             Singleton<SITAirdropsManager>.Instance.ReceiveBuildLootContainer(packet.Loot, packet.Config);
@@ -118,7 +124,7 @@ namespace StayInTarkov.Networking
             }
             else
             {
-                EFT.UI.ConsoleScreen.LogError("OnAirdropPacketReceived: Received package but manager is not instantiated!");
+                ConsoleScreen.LogError("OnAirdropPacketReceived: Received package but manager is not instantiated!");
             }
         }
 
@@ -132,7 +138,7 @@ namespace StayInTarkov.Networking
         {
             if (!packet.IsRequest)
             {
-                EFT.UI.ConsoleScreen.Log($"Received CharacterRequest! ProfileID: {packet.PlayerInfo.Profile.ProfileId}, Nickname: {packet.PlayerInfo.Profile.Nickname}");
+                ConsoleScreen.Log($"Received CharacterRequest! ProfileID: {packet.PlayerInfo.Profile.ProfileId}, Nickname: {packet.PlayerInfo.Profile.Nickname}");
                 if (packet.ProfileId != MyPlayer.ProfileId)
                 {
                     if (!CoopGameComponent.PlayersToSpawn.ContainsKey(packet.PlayerInfo.Profile.ProfileId))
@@ -145,7 +151,7 @@ namespace StayInTarkov.Networking
             }
             else if (packet.IsRequest)
             {
-                EFT.UI.ConsoleScreen.Log($"Received CharacterRequest from server, send my Profile.");
+                ConsoleScreen.Log($"Received CharacterRequest from server, send my Profile.");
                 AllCharacterRequestPacket requestPacket = new(MyPlayer.ProfileId)
                 {
                     IsRequest = false,
@@ -285,12 +291,12 @@ namespace StayInTarkov.Networking
                 }
                 else
                 {
-                    EFT.UI.ConsoleScreen.LogError("TimeAndWeather: WeatherDebug is null!");
+                    ConsoleScreen.LogError("TimeAndWeather: WeatherDebug is null!");
                 }
             }
             else
             {
-                EFT.UI.ConsoleScreen.LogError("TimeAndWeather: WeatherController is null!");
+                ConsoleScreen.LogError("TimeAndWeather: WeatherController is null!");
             }
         }
 
@@ -369,7 +375,10 @@ namespace StayInTarkov.Networking
         public void SendData<T>(NetDataWriter writer, ref T packet, DeliveryMethod deliveryMethod) where T : INetSerializable
         {
             _packetProcessor.WriteNetSerializable(writer, ref packet);
-            _netClient.FirstPeer.Send(writer, deliveryMethod);
+            if (_netClient.FirstPeer != null)
+            {
+                _netClient.FirstPeer.Send(writer, deliveryMethod); 
+            }
         }
 
         public void OnPeerConnected(NetPeer peer)
@@ -380,7 +389,7 @@ namespace StayInTarkov.Networking
 
         public void OnNetworkError(IPEndPoint endPoint, SocketError socketErrorCode)
         {
-            EFT.UI.ConsoleScreen.Log("[CLIENT] We received error " + socketErrorCode);
+            ConsoleScreen.Log("[CLIENT] We received error " + socketErrorCode);
         }
 
         public void OnNetworkReceive(NetPeer peer, NetPacketReader reader, byte channelNumber, DeliveryMethod deliveryMethod)
@@ -392,7 +401,7 @@ namespace StayInTarkov.Networking
         {
             if (messageType == UnconnectedMessageType.BasicMessage && _netClient.ConnectedPeersCount == 0 && reader.GetInt() == 1)
             {
-                EFT.UI.ConsoleScreen.Log("[CLIENT] Received discovery response. Connecting to: " + remoteEndPoint);
+                ConsoleScreen.Log("[CLIENT] Received discovery response. Connecting to: " + remoteEndPoint);
                 _netClient.Connect(remoteEndPoint, "sit.core");
             }
         }
@@ -409,7 +418,7 @@ namespace StayInTarkov.Networking
 
         public void OnPeerDisconnected(NetPeer peer, LiteNetLib.DisconnectInfo disconnectInfo)
         {
-            EFT.UI.ConsoleScreen.Log("[CLIENT] We disconnected because " + disconnectInfo.Reason);
+            ConsoleScreen.Log("[CLIENT] We disconnected because " + disconnectInfo.Reason);
         }
     }
 }

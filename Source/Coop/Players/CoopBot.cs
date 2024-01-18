@@ -120,7 +120,7 @@ namespace StayInTarkov.Coop
                 DamageType = damageInfo.DamageType,
                 BodyPartType = bodyPartType,
                 Absorbed = absorbed,
-                //ProfileId = damageInfo.Player == null ? "null" : damageInfo.Player.iPlayer.ProfileId
+                ProfileId = damageInfo.Player == null ? "null" : damageInfo.Player.iPlayer.ProfileId
             };
             HealthPacket.ToggleSend();
 

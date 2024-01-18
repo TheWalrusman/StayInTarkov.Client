@@ -1,4 +1,9 @@
-﻿using JetBrains.Annotations;
+﻿using Comfort.Common;
+using EFT;
+using JetBrains.Annotations;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace StayInTarkov.Coop.FreeCamera
@@ -15,6 +20,8 @@ namespace StayInTarkov.Coop.FreeCamera
     public class FreeCamera : MonoBehaviour
     {
         public bool IsActive = false;
+        private EFT.Player CurrentPlayer;
+        private DateTime lastDeltaTime;
 
         [UsedImplicitly]
         public void Update()
@@ -25,7 +32,7 @@ namespace StayInTarkov.Coop.FreeCamera
             }
 
             var fastMode = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-            var movementSpeed = fastMode ? 10f : 2f;
+            var movementSpeed = fastMode ? 20f : 2f;
 
             if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))
             {
@@ -46,6 +53,55 @@ namespace StayInTarkov.Coop.FreeCamera
             {
                 transform.position += (-transform.forward * (movementSpeed * Time.deltaTime));
             }
+
+            if (Input.GetKey(KeyCode.Mouse0) && lastDeltaTime < DateTime.Now.AddSeconds(-0.5))
+            {
+                lastDeltaTime = DateTime.Now;
+
+                List<EFT.Player> players = [];
+                var worldPlayers = Singleton<GameWorld>.Instance.allAlivePlayersByID.Where(x => x.Value.ProfileId.StartsWith("pmc"));
+
+                foreach (var obj in worldPlayers)
+                {
+                    if (!obj.Value.IsYourPlayer)
+                    {
+                        players.Add(obj.Value); 
+                    }
+                }
+
+                foreach (var player in players)
+                {
+                    if (CurrentPlayer == null)
+                    {
+                        CurrentPlayer = players[0];
+                        transform.position = new Vector3(CurrentPlayer.Transform.position.x - 2, CurrentPlayer.Transform.position.y + 2.5f, CurrentPlayer.Transform.position.z);
+                        transform.LookAt(CurrentPlayer.Transform.position);
+                        break;
+                    }
+
+                    int nextPlayer = players.IndexOf(CurrentPlayer) + 1;
+
+                    if (players.Count - 1 >= nextPlayer)
+                    {
+                        CurrentPlayer = players[nextPlayer];
+                        transform.position = new Vector3(CurrentPlayer.Transform.position.x -2, CurrentPlayer.Transform.position.y + 2.5f, CurrentPlayer.Transform.position.z);
+                        transform.LookAt(CurrentPlayer.Transform.position);
+                        break;                        
+                    }
+                    else
+                    {
+                        CurrentPlayer = players[0];
+                        transform.position = new Vector3(CurrentPlayer.Transform.position.x -2, CurrentPlayer.Transform.position.y + 2.5f, CurrentPlayer.Transform.position.z);
+                        transform.LookAt(CurrentPlayer.Transform.position);
+                        break;
+                    }
+                }
+            }
+
+            //if (Input.GetKey(KeyCode.Mouse1))
+            //{
+
+            //}
 
             if (true)
             {
